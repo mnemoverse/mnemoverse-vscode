@@ -1,0 +1,14 @@
+node_modules/
+out/
+*.vsix
+.vscode-test/
+.DS_Store
+
+# Environment files — extension doesn't need any, but block them defensively.
+.env
+.env.*
+
+# mcp-publisher CLI stores JWTs in cwd if accidentally invoked here.
+# See mcp-memory-server/.gitignore for the same protection.
+.mcpregistry_github_token
+.mcpregistry_registry_token

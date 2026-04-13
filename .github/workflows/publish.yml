@@ -1,0 +1,101 @@
+name: publish
+
+# Automated release pipeline for the Mnemoverse Memory VS Code extension.
+#
+# Trigger: push a semver tag `vX.Y.Z` (e.g. `git tag v0.1.0 && git push origin v0.1.0`).
+#
+# What this workflow does, in order:
+#   1. Checks out the tag.
+#   2. Verifies the tag version matches `package.json#version` (catches
+#      "forgot to bump" mistakes).
+#   3. `npm ci` + `npm run compile` (tsc to the out/ directory).
+#   4. Publishes to both VS Code Marketplace and Open VSX using
+#      `HaaLeo/publish-vscode-extension@v2`, which packages the .vsix once
+#      and uploads to both registries.
+#   5. Creates a GitHub release with auto-generated notes.
+#
+# Prerequisite secrets (one-time setup at Settings > Secrets and variables > Actions):
+#
+#   - VSCE_PAT — Azure DevOps Personal Access Token with "Marketplace: Manage"
+#     scope. Create at https://dev.azure.com. Publisher account `mnemoverse`
+#     must exist at https://marketplace.visualstudio.com/manage.
+#
+#   - OVSX_PAT — Open VSX access token. Create at https://open-vsx.org after
+#     signing the Eclipse Publisher Agreement. Namespace `mnemoverse` must
+#     exist; create it with `npx ovsx create-namespace mnemoverse -p <token>`.
+#
+# Neither secret has a backup — if lost, rotate and re-add. The workflow
+# fails loudly on missing secrets so you'll know immediately.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.1). Must already exist."
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      # Needed by softprops/action-gh-release to create the GitHub release.
+      contents: write
+
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Verify tag matches package.json version
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          TAG_VERSION="${TAG#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          echo "tag:         $TAG"
+          echo "tag version: $TAG_VERSION"
+          echo "pkg version: $PKG_VERSION"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag $TAG (version $TAG_VERSION) does not match package.json version $PKG_VERSION"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile TypeScript
+        run: npm run compile
+
+      - name: Publish to VS Code Marketplace + Open VSX
+        uses: HaaLeo/publish-vscode-extension@v2
+        with:
+          pat: ${{ secrets.VSCE_PAT }}
+          registryUrl: https://marketplace.visualstudio.com
+          extensionFile: ""
+          # Also publish to Open VSX:
+          ovsxPat: ${{ secrets.OVSX_PAT }}
+          ovsxRegistryUrl: https://open-vsx.org
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          body: |
+            Published automatically via `.github/workflows/publish.yml`.
+
+            - **VS Code Marketplace**: https://marketplace.visualstudio.com/items?itemName=mnemoverse.mnemoverse-vscode
+            - **Open VSX Registry**: https://open-vsx.org/extension/mnemoverse/mnemoverse-vscode
+
+            See the [CHANGELOG](https://github.com/mnemoverse/mnemoverse-vscode/blob/main/CHANGELOG.md) for details.
