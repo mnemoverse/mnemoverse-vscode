@@ -1,0 +1,6 @@
+# These files describe how contributors can sponsor the project.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+
+github: [mnemoverse]
+custom:
+  - "https://console.mnemoverse.com"
