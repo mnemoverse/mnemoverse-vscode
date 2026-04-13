@@ -46,7 +46,7 @@
     "theme": "dark"
   },
   "extensionKind": [
-    "workspace"
+    "ui"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
@@ -55,7 +55,7 @@
     },
     "virtualWorkspaces": {
       "supported": false,
-      "description": "This extension spawns a local process via npx, which does not work in remote or virtual workspaces (github.dev, vscode.dev)."
+      "description": "This extension spawns a local process via npx, which is unavailable in virtual workspaces such as github.dev or vscode.dev."
     }
   },
   "main": "./out/extension.js",

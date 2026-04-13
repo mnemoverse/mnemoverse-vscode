@@ -8,21 +8,6 @@ import { getApiKey } from "./auth";
 const PROVIDER_ID = "mnemoverse.memory";
 
 /**
- * Version string passed to `McpStdioServerDefinition`. The VS Code API
- * uses this field for cache invalidation — whenever the string changes,
- * the editor re-fetches the tool list from the server and prompts the
- * user to refresh.
- *
- * Our spawn line is `npx -y @mnemoverse/mcp-memory-server@latest`, so the
- * actual running code is whatever `latest` resolves to at spawn time.
- * A fixed semver here would lie — "latest" is the honest answer. If we
- * want to force a refresh on a breaking upstream change, bump the
- * extension version and VS Code will reload on install of the new
- * extension release.
- */
-const SERVER_VERSION = "latest";
-
-/**
  * Register the Mnemoverse Memory MCP server with VS Code's language-model
  * runtime. This is the canonical 2026 replacement for writing a
  * `.vscode/mcp.json` file: the Provider API lets our extension tell
@@ -61,6 +46,22 @@ const SERVER_VERSION = "latest";
 export function registerProvider(
   context: vscode.ExtensionContext,
 ): vscode.Disposable {
+  // VS Code uses `McpStdioServerDefinition.version` as a cache key for
+  // the server's tool list — when it changes, the editor re-fetches.
+  // Our spawn line is `npx -y @mnemoverse/mcp-memory-server@latest`, so
+  // the actual running code is whatever `latest` resolves to at spawn
+  // time; we can't read the real upstream version without spawning. We
+  // tie the cache key to the *extension* version instead, read from
+  // `context.extension.packageJSON` (the native VS Code API — no
+  // relative `require` of package.json that would be fragile if the
+  // vsix layout changes). Every extension release forces a clean
+  // tool-list refresh. If the upstream server changes its tool surface
+  // in a way users need to pick up, bump the extension patch version
+  // and re-publish.
+  const serverVersion: string =
+    (context.extension?.packageJSON?.version as string | undefined) ??
+    "0.0.0";
+
   return vscode.lm.registerMcpServerDefinitionProvider(PROVIDER_ID, {
     // `onDidChangeMcpServerDefinitions` is optional per the interface
     // (`readonly onDidChangeMcpServerDefinitions?: Event<void>;`) and
@@ -84,7 +85,7 @@ export function registerProvider(
           "npx",
           ["-y", "@mnemoverse/mcp-memory-server@latest"],
           undefined,
-          SERVER_VERSION,
+          serverVersion,
         ),
       ];
     },
@@ -93,8 +94,13 @@ export function registerProvider(
       server: vscode.McpServerDefinition,
       token: vscode.CancellationToken,
     ): Promise<vscode.McpServerDefinition> => {
+      // On cancellation we MUST NOT return the unresolved definition —
+      // VS Code may still spawn the server with an empty API key env
+      // var, which would hit core.mnemoverse.com with a 401 and surface
+      // a confusing auth error to the user. Throwing `CancellationError`
+      // is the documented way to signal "abort this resolve cleanly".
       if (token.isCancellationRequested) {
-        return server;
+        throw new vscode.CancellationError();
       }
       if (!(server instanceof vscode.McpStdioServerDefinition)) {
         return server;
@@ -102,7 +108,7 @@ export function registerProvider(
 
       const apiKey = await getApiKey(context);
       if (token.isCancellationRequested) {
-        return server;
+        throw new vscode.CancellationError();
       }
       if (!apiKey) {
         // User cancelled the API-key prompt. Refuse to start the server

@@ -11,16 +11,26 @@ of the first tag push and immediately surfaced a handful of real bugs
 plus a misleading README scope claim via Copilot's auto-review and a
 three-agent internal audit. No users were affected (v0.1.0 had zero
 installs at publish time), but shipping early plus reviewing hard is
-the whole point of v0.1.x.
+the whole point of v0.1.x. A second Copilot pass on the patch PR itself
+caught five more minor issues, all folded into this release.
 
 ### Fixed
 
 - `provider.ts`: `provideMcpServerDefinitions` and
   `resolveMcpServerDefinition` now accept the `CancellationToken`
   parameter declared in the `McpServerDefinitionProvider` interface.
-  `resolveMcpServerDefinition` also checks `token.isCancellationRequested`
-  before and after the API-key prompt so a shutdown-during-activation
-  race no longer leaks a pending `showInputBox`.
+  `resolveMcpServerDefinition` now throws `vscode.CancellationError`
+  when the token fires (instead of returning the unresolved
+  definition) so a shutdown-during-activation race can no longer
+  cause VS Code to spawn the server with a missing API key and
+  surface a confusing 401 from core.mnemoverse.com.
+- `provider.ts`: `McpStdioServerDefinition.version` is now tied to the
+  extension version (read at runtime from `package.json`) instead of
+  the literal string `"latest"`. VS Code uses this field as a cache
+  key for the server's tool list — a fixed string meant the cache
+  would never refresh even when a new extension release shipped a
+  behavioural change. Tying it to the extension version means every
+  patch release forces a clean tool-list refresh in the editor.
 - `provider.ts`: replaced the unused `EventEmitter<void>` with omission
   of the optional `onDidChangeMcpServerDefinitions` field. Our
   definition list is static at runtime; earlier versions leaked a
@@ -30,16 +40,15 @@ the whole point of v0.1.x.
   key is now materialised only in `resolveMcpServerDefinition`, so
   nothing secret-shaped ever appears in the definition a debugger or
   other extension might snapshot.
-- `provider.ts`: `McpStdioServerDefinition.version` now passes the
-  literal string `"latest"` instead of the extension's package.json
-  version. The field represents the server's version for cache
-  invalidation, not the extension's — passing the extension version
-  was misleading for diagnostics.
 - `extension.ts`: every command handler is now wrapped in a
   `try/catch` that surfaces failures via `showErrorMessage`. Without
   this, rejections from `SecretStorage.store()` (keychain locked) or
   `env.openExternal` (no default browser) were silently swallowed by
   the command runner and the palette entry appeared to do nothing.
+  The user-facing toast deliberately shows only a generic title —
+  full error detail (including any SDK internals in `Error.message`)
+  is logged to `console.error` so it reaches the Extension Host log
+  without leaking into the UI.
 
 ### Changed
 
@@ -60,14 +69,23 @@ the whole point of v0.1.x.
     show the Preview banner.
   - `pricing: "Free"` — explicit rather than implicit.
   - `sponsor.url` — points at `github.com/sponsors/mnemoverse`.
-  - `extensionKind: ["workspace"]` — we only run local (spawn `npx`),
-    so we declare it to avoid VS Code offering us for Remote
-    Development scenarios where we would silently fail.
+  - `extensionKind: ["ui"]` — the extension must run on the local
+    UI-side extension host so that `npx` spawns on the user's own
+    machine and `SecretStorage` reads from the local OS keychain.
+    The earlier `"workspace"` value would have made VS Code run the
+    extension on the remote extension host in Remote-SSH / Codespaces
+    sessions, where `npx` would resolve against the remote node_modules
+    and `SecretStorage` would point at a different keychain — the exact
+    opposite of our intent. Copilot's review on the v0.1.1 PR caught
+    this.
   - `capabilities.untrustedWorkspaces: { supported: false }` and
     `capabilities.virtualWorkspaces: { supported: false }` — both
     required for anything that runs arbitrary third-party code via
     `npx`. Without these declarations VS Code shows an unexpected
-    trust dialog on activation.
+    trust dialog on activation. The `virtualWorkspaces` description
+    now explicitly names `github.dev` and `vscode.dev` as the
+    unsupported environments (the flag is about virtual workspaces
+    only, not Remote-SSH).
   - `galleryBanner` — dark navy brand colour on the Marketplace hero.
   - Keyword list trimmed to the actually relevant ones: dropped
     `claude`, `cursor`, `vscode`, `chatgpt` (the extension itself

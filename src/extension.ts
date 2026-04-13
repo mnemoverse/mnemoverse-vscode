@@ -88,13 +88,19 @@ export function deactivate(): void {
  *   - No default browser registered — `openExternal` throws
  *   - OS file system issues when writing the secret
  *
- * We keep the message generic on purpose so internal `Error.message`
- * content (which may reference SDK internals) doesn't leak into the UI.
+ * UI text is kept generic (title only) so internal `Error.message`
+ * content (which may reference SDK internals, paths, or other details)
+ * never reaches the user-facing toast. Full detail goes to the
+ * developer console via `console.error` — visible in the Extension Host
+ * log for contributors reproducing an issue and in user-submitted bug
+ * reports when we ask them to run the `Developer: Toggle Developer Tools`
+ * command.
  */
 async function showCommandError(
   title: string,
   err: unknown,
 ): Promise<void> {
   const detail = err instanceof Error ? err.message : String(err);
-  await vscode.window.showErrorMessage(`${title}: ${detail}`);
+  console.error(`[mnemoverse] ${title}: ${detail}`);
+  await vscode.window.showErrorMessage(title);
 }
