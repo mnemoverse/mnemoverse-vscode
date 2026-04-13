@@ -76,15 +76,32 @@ jobs:
       - name: Compile TypeScript
         run: npm run compile
 
-      - name: Publish to VS Code Marketplace + Open VSX
+      # HaaLeo/publish-vscode-extension@v2 publishes to ONE registry per
+      # invocation. We run it twice — first for VS Code Marketplace, then
+      # Open VSX. The action packages a .vsix on the first run and reuses
+      # the same file for the second run via `packagePath`, so we avoid
+      # compiling + packaging twice.
+      #
+      # `ovsxPat` / `ovsxRegistryUrl` are NOT valid inputs — earlier
+      # attempts to cram both publishes into one step silently dropped
+      # the Open VSX upload. The comment exists so the next contributor
+      # doesn't reinvent that mistake.
+
+      - name: Publish to VS Code Marketplace
+        id: vsce
         uses: HaaLeo/publish-vscode-extension@v2
         with:
           pat: ${{ secrets.VSCE_PAT }}
           registryUrl: https://marketplace.visualstudio.com
-          extensionFile: ""
-          # Also publish to Open VSX:
-          ovsxPat: ${{ secrets.OVSX_PAT }}
-          ovsxRegistryUrl: https://open-vsx.org
+
+      - name: Publish to Open VSX
+        uses: HaaLeo/publish-vscode-extension@v2
+        with:
+          pat: ${{ secrets.OVSX_PAT }}
+          registryUrl: https://open-vsx.org
+          # Re-use the .vsix packaged in the previous step instead of
+          # re-packaging from source.
+          extensionFile: ${{ steps.vsce.outputs.vsixPath }}
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
