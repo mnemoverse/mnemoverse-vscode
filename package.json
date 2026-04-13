@@ -1,9 +1,11 @@
 {
   "name": "mnemoverse-vscode",
   "displayName": "Mnemoverse Memory",
-  "description": "Persistent memory across Claude, Cursor, ChatGPT, VS Code. Importance scoring, linked recall.",
-  "version": "0.1.0",
-  "publisher": "mnemoverse",
+  "description": "Persistent memory for GitHub Copilot Chat Agent Mode. Your memories sync across Claude, Cursor, ChatGPT, and other Mnemoverse-connected tools.",
+  "version": "0.1.1",
+  "publisher": "Mnemoverse",
+  "preview": true,
+  "pricing": "Free",
   "license": "MIT",
   "homepage": "https://mnemoverse.com/docs/api/mcp-server",
   "bugs": {
@@ -12,6 +14,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/mnemoverse/mnemoverse-vscode.git"
+  },
+  "sponsor": {
+    "url": "https://github.com/sponsors/mnemoverse"
   },
   "engines": {
     "vscode": "^1.102.0"
@@ -26,10 +31,8 @@
     "memory",
     "ai",
     "ai-agent",
-    "claude",
-    "cursor",
-    "chatgpt",
     "copilot",
+    "copilot-chat",
     "agent-mode",
     "mnemoverse",
     "persistent-memory",
@@ -38,6 +41,23 @@
     "model-context-protocol"
   ],
   "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#0b1020",
+    "theme": "dark"
+  },
+  "extensionKind": [
+    "ui"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "This extension spawns the @mnemoverse/mcp-memory-server npm package via npx. Running arbitrary third-party code requires a trusted workspace."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "This extension spawns a local process via npx, which is unavailable in virtual workspaces such as github.dev or vscode.dev."
+    }
+  },
   "main": "./out/extension.js",
   "activationEvents": [
     "onStartupFinished"
@@ -52,17 +72,17 @@
     "commands": [
       {
         "command": "mnemoverse.setApiKey",
-        "title": "Mnemoverse: Set API Key",
+        "title": "Set API Key",
         "category": "Mnemoverse"
       },
       {
         "command": "mnemoverse.clearApiKey",
-        "title": "Mnemoverse: Clear API Key",
+        "title": "Clear API Key",
         "category": "Mnemoverse"
       },
       {
         "command": "mnemoverse.openDocs",
-        "title": "Mnemoverse: Open Documentation",
+        "title": "Open Documentation",
         "category": "Mnemoverse"
       }
     ]
