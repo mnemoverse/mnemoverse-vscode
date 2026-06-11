@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { registerProvider } from "./provider";
 import { clearApiKey, getApiKey } from "./auth";
+import { signIn, signOut, handleUri } from "./signin";
 
 /**
  * Extension entry point. Called by VS Code after activation
@@ -27,8 +28,37 @@ import { clearApiKey, getApiKey } from "./auth";
  * changing the provider wiring.
  */
 export function activate(context: vscode.ExtensionContext): void {
+  // Fired after sign-in / sign-out so VS Code re-resolves the MCP server with
+  // the new (or cleared) key. Owned here and disposed via subscriptions.
+  const serverChanged = new vscode.EventEmitter<void>();
+  const fireServerChanged = () => serverChanged.fire();
+
   context.subscriptions.push(
-    registerProvider(context),
+    serverChanged,
+    registerProvider(context, serverChanged.event),
+
+    // Browser keyless sign-in returns here via vscode://Mnemoverse.mnemoverse-vscode/auth-callback.
+    vscode.window.registerUriHandler({
+      handleUri: (uri) => {
+        void handleUri(uri);
+      },
+    }),
+
+    vscode.commands.registerCommand("mnemoverse.signIn", async () => {
+      try {
+        await signIn(context, fireServerChanged);
+      } catch (err) {
+        await showCommandError("Failed to sign in to Mnemoverse", err);
+      }
+    }),
+
+    vscode.commands.registerCommand("mnemoverse.signOut", async () => {
+      try {
+        await signOut(context, fireServerChanged);
+      } catch (err) {
+        await showCommandError("Failed to sign out of Mnemoverse", err);
+      }
+    }),
 
     vscode.commands.registerCommand("mnemoverse.setApiKey", async () => {
       try {
@@ -37,6 +67,7 @@ export function activate(context: vscode.ExtensionContext): void {
         await clearApiKey(context);
         const key = await getApiKey(context);
         if (key) {
+          fireServerChanged();
           await vscode.window.showInformationMessage(
             "Mnemoverse API key saved.",
           );
@@ -49,6 +80,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("mnemoverse.clearApiKey", async () => {
       try {
         await clearApiKey(context);
+        fireServerChanged();
         await vscode.window.showInformationMessage(
           "Mnemoverse API key cleared.",
         );

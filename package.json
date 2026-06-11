@@ -60,7 +60,8 @@
   },
   "main": "./out/extension.js",
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onUri"
   ],
   "contributes": {
     "mcpServerDefinitionProviders": [
@@ -71,8 +72,18 @@
     ],
     "commands": [
       {
+        "command": "mnemoverse.signIn",
+        "title": "Sign In",
+        "category": "Mnemoverse"
+      },
+      {
+        "command": "mnemoverse.signOut",
+        "title": "Sign Out",
+        "category": "Mnemoverse"
+      },
+      {
         "command": "mnemoverse.setApiKey",
-        "title": "Set API Key",
+        "title": "Set API Key (paste manually)",
         "category": "Mnemoverse"
       },
       {
@@ -90,6 +101,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "test": "vitest run",
     "vscode:prepublish": "npm run compile",
     "package": "vsce package",
     "publish": "vsce publish"
@@ -98,6 +110,7 @@
     "@types/node": "^20.19.0",
     "@types/vscode": "^1.102.0",
     "@vscode/vsce": "^3.6.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.9"
   }
 }

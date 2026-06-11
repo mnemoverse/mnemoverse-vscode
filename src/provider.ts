@@ -45,6 +45,7 @@ const PROVIDER_ID = "mnemoverse.memory";
  */
 export function registerProvider(
   context: vscode.ExtensionContext,
+  onDidChangeServerDefinitions?: vscode.Event<void>,
 ): vscode.Disposable {
   // VS Code uses `McpStdioServerDefinition.version` as a cache key for
   // the server's tool list — when it changes, the editor re-fetches.
@@ -63,9 +64,13 @@ export function registerProvider(
     "0.0.0";
 
   return vscode.lm.registerMcpServerDefinitionProvider(PROVIDER_ID, {
-    // `onDidChangeMcpServerDefinitions` is optional per the interface
-    // (`readonly onDidChangeMcpServerDefinitions?: Event<void>;`) and
-    // we have a static list, so we omit the field entirely.
+    // Fired by extension.ts after a successful sign-in / sign-out so VS Code
+    // re-runs resolveMcpServerDefinition and respawns the server with the new
+    // (or cleared) key — without it the user would have to restart the server
+    // manually after signing in. Owned + disposed by extension.ts (the emitter
+    // lives in context.subscriptions), so registering its event here leaks
+    // nothing across activations.
+    onDidChangeMcpServerDefinitions: onDidChangeServerDefinitions,
 
     provideMcpServerDefinitions: async (
       _token: vscode.CancellationToken,

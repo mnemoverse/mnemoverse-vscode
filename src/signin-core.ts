@@ -1,0 +1,103 @@
+/**
+ * Keyless sign-in — pure, VS Code-free core (so it unit-tests in node).
+ *
+ * Mirrors the portal contract (mnemoverse-portal docs/TASK-KEYLESS-SIGNIN-CONTRACT.md
+ * §2/§5/§7). The crypto here MUST stay byte-for-byte compatible with the portal:
+ * PKCE S256 and the confirm-code formula are cross-side contracts (the portal
+ * pins a golden vector — keep this side matching it).
+ *
+ * Uses node:crypto webcrypto so it is typed without the DOM lib and runs in both
+ * the VS Code extension host (Node 20+) and vitest.
+ */
+import { webcrypto as crypto } from "node:crypto";
+
+export const CONSOLE_BASE_URL = "https://console.mnemoverse.com";
+export const CONNECT_PATH = "/connect/vscode";
+export const EXCHANGE_URL = `${CONSOLE_BASE_URL}/api/connect/exchange`;
+// Lowercased — VS Code lowercases the URI authority before dispatching to the
+// UriHandler, and the portal allowlist matches this exact value.
+export const REDIRECT_AUTHORITY = "mnemoverse.mnemoverse-vscode";
+export const REDIRECT_PATH = "/auth-callback";
+
+export function base64urlEncode(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** 32 CSPRNG bytes (256-bit) as unpadded base64url. */
+export function generateState(): string {
+  const b = new Uint8Array(32);
+  crypto.getRandomValues(b);
+  return base64urlEncode(b);
+}
+
+const enc = new TextEncoder();
+
+async function sha256(input: string): Promise<Uint8Array> {
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(input)));
+}
+
+/** PKCE S256: a fresh verifier + its base64url(SHA-256) challenge. */
+export async function generatePkce(): Promise<{ verifier: string; challenge: string }> {
+  const v = new Uint8Array(32);
+  crypto.getRandomValues(v);
+  const verifier = base64urlEncode(v);
+  const challenge = base64urlEncode(await sha256(verifier));
+  return { verifier, challenge };
+}
+
+// Cross-side anti-phishing visual code (§7). MUST equal the portal's
+// deriveConfirmCode(state): 8 chars of SHA-256(utf8 state) over this 32-char
+// alphabet (byte & 31), formatted XXXX-XXXX. Golden: "golden-vector-state" → "5V9K-DASW".
+const CONFIRM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+export async function deriveConfirmCode(state: string): Promise<string> {
+  const d = await sha256(state);
+  let out = "";
+  for (let i = 0; i < 8; i++) out += CONFIRM_ALPHABET[d[i] & 31];
+  return `${out.slice(0, 4)}-${out.slice(4)}`;
+}
+
+export function buildRedirectUri(uriScheme: string): string {
+  return `${uriScheme}://${REDIRECT_AUTHORITY}${REDIRECT_PATH}`;
+}
+
+export function buildConnectUrl(opts: {
+  state: string;
+  redirectUri: string;
+  codeChallenge: string;
+  name: string;
+  editor: string;
+}): string {
+  const u = new URL(CONSOLE_BASE_URL + CONNECT_PATH);
+  u.searchParams.set("state", opts.state);
+  u.searchParams.set("redirect_uri", opts.redirectUri);
+  u.searchParams.set("code_challenge", opts.codeChallenge);
+  u.searchParams.set("name", opts.name);
+  u.searchParams.set("editor", opts.editor);
+  return u.toString();
+}
+
+export type CallbackResult =
+  | { kind: "code"; code: string; state: string }
+  | { kind: "error"; error: string; state: string }
+  | { kind: "invalid" };
+
+/** Parse the `vscode://…/auth-callback?…` query into code+state / error+state. */
+export function parseCallback(query: string): CallbackResult {
+  const q = new URLSearchParams(query);
+  const state = q.get("state") ?? "";
+  const code = q.get("code");
+  const error = q.get("error");
+  if (code) return { kind: "code", code, state };
+  if (error) return { kind: "error", error, state };
+  return { kind: "invalid" };
+}
+
+export interface ExchangeResponse {
+  api_key: string;
+  key_prefix: string;
+  organization_id: string;
+  tier: string;
+  email: string;
+  contract_version: number;
+}

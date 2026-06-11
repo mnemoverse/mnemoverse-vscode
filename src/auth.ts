@@ -58,6 +58,19 @@ export async function getApiKey(
 }
 
 /**
+ * Store an API key obtained WITHOUT a prompt — used by the keyless browser
+ * sign-in flow after it exchanges the one-time code for the real key. Writes to
+ * the SAME SecretStorage slot getApiKey reads, so the MCP provider picks it up
+ * with zero changes to its injection path.
+ */
+export async function storeApiKey(
+  context: vscode.ExtensionContext,
+  key: string,
+): Promise<void> {
+  await context.secrets.store(SECRET_KEY, key);
+}
+
+/**
  * Delete the stored API key. Called by the `mnemoverse.clearApiKey` command
  * and indirectly by `mnemoverse.setApiKey` (to force a re-prompt when the
  * user wants to rotate their key without reinstalling the extension).
