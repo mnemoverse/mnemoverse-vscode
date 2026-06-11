@@ -89,11 +89,12 @@ describe("normalizeApiKey — only persist a well-formed mk_live_ key", () => {
   it("trims and returns a valid key", () => {
     expect(normalizeApiKey("  mk_live_abc123  ")).toBe("mk_live_abc123");
   });
-  it("throws on empty / wrong prefix", () => {
+  it("throws on empty / wrong prefix / bare prefix", () => {
     expect(() => normalizeApiKey("")).toThrow(/invalid_key_format/);
     expect(() => normalizeApiKey("   ")).toThrow(/invalid_key_format/);
     expect(() => normalizeApiKey("sk_live_x")).toThrow(/invalid_key_format/);
     expect(() => normalizeApiKey("undefined")).toThrow(/invalid_key_format/);
+    expect(() => normalizeApiKey("mk_live_")).toThrow(/invalid_key_format/); // prefix, no suffix
   });
 });
 
@@ -113,7 +114,8 @@ describe("parseExchangeResponse — validate the server shape before trusting it
   it("rejects a malformed api_key (wrong prefix)", () => {
     expect(() => parseExchangeResponse({ ...good, api_key: "sk_x" })).toThrow();
   });
-  it("rejects a missing / non-string email", () => {
+  it("rejects a missing / non-string / empty email", () => {
     expect(() => parseExchangeResponse({ ...good, email: undefined })).toThrow(/invalid_response_schema/);
+    expect(() => parseExchangeResponse({ ...good, email: "" })).toThrow(/invalid_response_schema/);
   });
 });

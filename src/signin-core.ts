@@ -111,7 +111,8 @@ export const KEY_PREFIX = "mk_live_";
  */
 export function normalizeApiKey(key: string): string {
   const trimmed = (key ?? "").trim();
-  if (!trimmed || !trimmed.startsWith(KEY_PREFIX)) {
+  // Require the prefix AND a non-empty suffix — a bare "mk_live_" is not a key.
+  if (!trimmed.startsWith(KEY_PREFIX) || trimmed.length <= KEY_PREFIX.length) {
     throw new Error("invalid_key_format");
   }
   return trimmed;
@@ -127,9 +128,14 @@ export function parseExchangeResponse(data: unknown): ExchangeResponse {
     throw new Error("invalid_response_schema");
   }
   const d = data as Record<string, unknown>;
-  if (typeof d.api_key !== "string" || d.api_key.length === 0 || typeof d.email !== "string") {
+  if (
+    typeof d.api_key !== "string" ||
+    d.api_key.length === 0 ||
+    typeof d.email !== "string" ||
+    d.email.length === 0
+  ) {
     throw new Error("invalid_response_schema");
   }
-  normalizeApiKey(d.api_key); // also reject a wrong-prefix key
+  normalizeApiKey(d.api_key); // also reject a wrong-prefix / bare-prefix key
   return data as ExchangeResponse;
 }
