@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { normalizeApiKey } from "./signin-core";
 
 /**
  * Key under which the Mnemoverse API key is stored in the extension's
@@ -67,7 +68,9 @@ export async function storeApiKey(
   context: vscode.ExtensionContext,
   key: string,
 ): Promise<void> {
-  await context.secrets.store(SECRET_KEY, key);
+  // Reject a malformed key (same check getApiKey applies to pasted keys) so a
+  // bad value from any source can't silently break later auth.
+  await context.secrets.store(SECRET_KEY, normalizeApiKey(key));
 }
 
 /**

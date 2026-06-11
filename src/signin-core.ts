@@ -101,3 +101,35 @@ export interface ExchangeResponse {
   email: string;
   contract_version: number;
 }
+
+export const KEY_PREFIX = "mk_live_";
+
+/**
+ * Validate + trim a key before it is persisted. Mirrors getApiKey's paste-flow
+ * check so a malformed value (from any source — a buggy server, a corrupt body)
+ * can never land in SecretStorage and cause silent auth failures later.
+ */
+export function normalizeApiKey(key: string): string {
+  const trimmed = (key ?? "").trim();
+  if (!trimmed || !trimmed.startsWith(KEY_PREFIX)) {
+    throw new Error("invalid_key_format");
+  }
+  return trimmed;
+}
+
+/**
+ * Validate the /api/connect/exchange response shape before trusting it. A 200
+ * with an unexpected body must never store an empty/undefined key or render
+ * "Signed in as undefined" — throw instead so the flow reports a clean failure.
+ */
+export function parseExchangeResponse(data: unknown): ExchangeResponse {
+  if (!data || typeof data !== "object") {
+    throw new Error("invalid_response_schema");
+  }
+  const d = data as Record<string, unknown>;
+  if (typeof d.api_key !== "string" || d.api_key.length === 0 || typeof d.email !== "string") {
+    throw new Error("invalid_response_schema");
+  }
+  normalizeApiKey(d.api_key); // also reject a wrong-prefix key
+  return data as ExchangeResponse;
+}

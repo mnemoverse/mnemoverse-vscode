@@ -8,6 +8,8 @@ import {
   buildRedirectUri,
   buildConnectUrl,
   parseCallback,
+  normalizeApiKey,
+  parseExchangeResponse,
 } from "./signin-core";
 
 describe("base64urlEncode", () => {
@@ -80,5 +82,38 @@ describe("parseCallback", () => {
   it("returns invalid when neither code nor error present", () => {
     expect(parseCallback("foo=bar").kind).toBe("invalid");
     expect(parseCallback("").kind).toBe("invalid");
+  });
+});
+
+describe("normalizeApiKey — only persist a well-formed mk_live_ key", () => {
+  it("trims and returns a valid key", () => {
+    expect(normalizeApiKey("  mk_live_abc123  ")).toBe("mk_live_abc123");
+  });
+  it("throws on empty / wrong prefix", () => {
+    expect(() => normalizeApiKey("")).toThrow(/invalid_key_format/);
+    expect(() => normalizeApiKey("   ")).toThrow(/invalid_key_format/);
+    expect(() => normalizeApiKey("sk_live_x")).toThrow(/invalid_key_format/);
+    expect(() => normalizeApiKey("undefined")).toThrow(/invalid_key_format/);
+  });
+});
+
+describe("parseExchangeResponse — validate the server shape before trusting it", () => {
+  const good = { api_key: "mk_live_x", key_prefix: "mk_live_x", organization_id: "user_a", tier: "free", email: "a@x.io", contract_version: 1 };
+  it("accepts a well-formed response", () => {
+    expect(parseExchangeResponse(good)).toEqual(good);
+  });
+  it("rejects a non-object / null", () => {
+    expect(() => parseExchangeResponse(null)).toThrow(/invalid_response_schema/);
+    expect(() => parseExchangeResponse("nope")).toThrow(/invalid_response_schema/);
+  });
+  it("rejects a missing / non-string api_key", () => {
+    expect(() => parseExchangeResponse({ ...good, api_key: undefined })).toThrow(/invalid_response_schema/);
+    expect(() => parseExchangeResponse({ ...good, api_key: 123 })).toThrow(/invalid_response_schema/);
+  });
+  it("rejects a malformed api_key (wrong prefix)", () => {
+    expect(() => parseExchangeResponse({ ...good, api_key: "sk_x" })).toThrow();
+  });
+  it("rejects a missing / non-string email", () => {
+    expect(() => parseExchangeResponse({ ...good, email: undefined })).toThrow(/invalid_response_schema/);
   });
 });

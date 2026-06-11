@@ -7,6 +7,7 @@ import {
   buildRedirectUri,
   buildConnectUrl,
   parseCallback,
+  parseExchangeResponse,
   EXCHANGE_URL,
   type ExchangeResponse,
 } from "./signin-core";
@@ -171,12 +172,8 @@ async function exchange(code: string, verifier: string): Promise<ExchangeRespons
     }
     throw new Error(errCode);
   }
-  const data = (await res.json()) as Partial<ExchangeResponse>;
-  if (!data || typeof data.api_key !== "string" || data.api_key.length === 0) {
-    // A 200 with an unexpected body must never store an empty/undefined key.
-    throw new Error("invalid_response");
-  }
-  return data as ExchangeResponse;
+  // Validate the shape before trusting it (tested in signin-core).
+  return parseExchangeResponse(await res.json());
 }
 
 function reportOutcome(o: Outcome): void {
