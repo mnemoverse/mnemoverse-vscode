@@ -76,7 +76,29 @@ export async function signIn(
   });
   const confirmCode = await deriveConfirmCode(state);
 
-  await vscode.env.openExternal(vscode.Uri.parse(url));
+  // Arm the attempt (pending + timer + outcome promise) BEFORE opening the
+  // browser, so a very fast callback isn't dropped and an openExternal failure
+  // can't leave a stale pending behind.
+  let done = false;
+  let resolveOutcome!: (o: Outcome) => void;
+  const outcomePromise = new Promise<Outcome>((r) => {
+    resolveOutcome = r;
+  });
+  const settle = (o: Outcome) => {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    if (pending && pending.state === state) pending = undefined;
+    resolveOutcome(o);
+  };
+  const timer = setTimeout(() => settle({ ok: false, reason: "timeout" }), TIMEOUT_MS);
+  pending = { state, verifier, context, fireServerChanged, settle };
+
+  try {
+    await vscode.env.openExternal(vscode.Uri.parse(url));
+  } catch {
+    settle({ ok: false, reason: "exchange", detail: "could not open the browser" });
+  }
 
   const outcome = await vscode.window.withProgress<Outcome>(
     {
@@ -84,20 +106,10 @@ export async function signIn(
       title: `Finish signing in to Mnemoverse in your browser. Confirm the code matches: ${confirmCode}`,
       cancellable: true,
     },
-    (_progress, token) =>
-      new Promise<Outcome>((resolve) => {
-        let done = false;
-        const settle = (o: Outcome) => {
-          if (done) return;
-          done = true;
-          clearTimeout(timer);
-          if (pending && pending.state === state) pending = undefined;
-          resolve(o);
-        };
-        const timer = setTimeout(() => settle({ ok: false, reason: "timeout" }), TIMEOUT_MS);
-        token.onCancellationRequested(() => settle({ ok: false, reason: "cancelled" }));
-        pending = { state, verifier, context, fireServerChanged, settle };
-      }),
+    (_progress, token) => {
+      token.onCancellationRequested(() => settle({ ok: false, reason: "cancelled" }));
+      return outcomePromise;
+    },
   );
 
   reportOutcome(outcome);
@@ -122,6 +134,10 @@ export async function handleUri(uri: vscode.Uri): Promise<void> {
   }
   try {
     const data = await exchange(result.code, p.verifier);
+    // The exchange burned the one-time code. If the attempt was cancelled /
+    // timed out / superseded WHILE it was in flight, `pending` was cleared (or
+    // replaced) — do NOT store a key for an attempt the user abandoned.
+    if (pending !== p) return;
     await storeApiKey(p.context, data.api_key);
     p.fireServerChanged(); // make VS Code re-resolve + respawn the MCP server with the new key
     p.settle({ ok: true, email: data.email });
@@ -155,7 +171,12 @@ async function exchange(code: string, verifier: string): Promise<ExchangeRespons
     }
     throw new Error(errCode);
   }
-  return (await res.json()) as ExchangeResponse;
+  const data = (await res.json()) as Partial<ExchangeResponse>;
+  if (!data || typeof data.api_key !== "string" || data.api_key.length === 0) {
+    // A 200 with an unexpected body must never store an empty/undefined key.
+    throw new Error("invalid_response");
+  }
+  return data as ExchangeResponse;
 }
 
 function reportOutcome(o: Outcome): void {
