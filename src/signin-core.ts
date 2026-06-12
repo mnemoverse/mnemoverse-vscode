@@ -2,9 +2,9 @@
  * Keyless sign-in — pure, VS Code-free core (so it unit-tests in node).
  *
  * Mirrors the portal contract (mnemoverse-portal docs/TASK-KEYLESS-SIGNIN-CONTRACT.md
- * §2/§5/§7). The crypto here MUST stay byte-for-byte compatible with the portal:
- * PKCE S256 and the confirm-code formula are cross-side contracts (the portal
- * pins a golden vector — keep this side matching it).
+ * §2/§5). The crypto here MUST stay byte-for-byte compatible with the portal:
+ * PKCE S256 is a cross-side contract — the verifier we compute here must match
+ * what the portal's exchange route verifies.
  *
  * Uses node:crypto webcrypto so it is typed without the DOM lib and runs in both
  * the VS Code extension host (Node 20+) and vitest.

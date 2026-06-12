@@ -13,8 +13,8 @@ import { claimConnectPrompt } from "./session";
  * still produce at most one toast.
  *
  * Clicking "Sign In" runs the SAME `mnemoverse.signIn` command the palette
- * exposes — the connect step stays fully human-driven (browser + anti-phishing
- * confirm code). We only route the click into the existing flow; this helper
+ * exposes — the connect step stays fully human-driven (the user approves in the
+ * browser). We only route the click into the existing flow; this helper
  * never mints, stores, or sees a key. The command handler in extension.ts is
  * already wrapped to surface its own errors, so a sign-in failure here is not
  * silent. Fire-and-forget by design: callers do not await the user's choice.
