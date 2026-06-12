@@ -1,5 +1,7 @@
 import * as vscode from "vscode";
-import { getApiKey } from "./auth";
+import { peekApiKey } from "./auth";
+import { promptConnect, wasConnectPromptShown } from "./prompts";
+import { SIGN_IN_REQUIRED_MESSAGE, shouldPromptConnect } from "./signin-core";
 
 /**
  * Must match the `id` field in `package.json` →
@@ -31,13 +33,14 @@ const PROVIDER_ID = "mnemoverse.memory";
  *   - `resolveMcpServerDefinition(server, token)` — optional but we
  *     implement it. Called right before VS Code spawns the server. THIS
  *     is where we pull the API key from `SecretStorage` and inject it
- *     into the env map, prompting the user if they haven't entered one
- *     yet.
+ *     into the env map. It reads the key WITHOUT prompting (`peekApiKey`):
+ *     if none is stored we throw a "Sign In" error and surface a one-click
+ *     connect toast, routing the user into the keyless flow rather than
+ *     popping a paste box for a key they do not have.
  *
  * Both methods accept a `CancellationToken` parameter that VS Code uses
  * to abort long-running work during shutdown or rapid activation. We
- * honour it at the top of `resolveMcpServerDefinition` (the prompt path
- * is the only slow part).
+ * honour it at the top of `resolveMcpServerDefinition`.
  *
  * Returning a `Disposable` lets `extension.ts` add it to
  * `context.subscriptions` so the provider unregisters cleanly when the
@@ -111,19 +114,24 @@ export function registerProvider(
         return server;
       }
 
-      const apiKey = await getApiKey(context);
+      // Read-only — must NOT prompt here. A paste box from resolve would
+      // bypass the keyless Sign In (the headline of v0.2.0) on the most
+      // common first touch: a Copilot agent reaching for a memory tool.
+      const apiKey = await peekApiKey(context);
       if (token.isCancellationRequested) {
         throw new vscode.CancellationError();
       }
       if (!apiKey) {
-        // User cancelled the API-key prompt. Refuse to start the server
-        // so VS Code shows an explicit error in Copilot Chat instead of
-        // silently failing with a 401 from core.mnemoverse.com. The user
-        // can run `Mnemoverse: Set API Key` from the command palette to
-        // try again.
-        throw new Error(
-          'Mnemoverse API key required. Run "Mnemoverse: Set API Key" from the command palette to enter one.',
-        );
+        // No key stored. Refuse to start the server so VS Code shows an
+        // explicit error in Copilot Chat instead of silently 401-ing against
+        // core.mnemoverse.com — and surface a one-click "Sign In" toast (at
+        // most once per session, shared with the first-run welcome) that
+        // routes the user into the keyless flow. The error still shows on
+        // every resolve; only the toast is rate-limited.
+        if (shouldPromptConnect(false, wasConnectPromptShown())) {
+          void promptConnect();
+        }
+        throw new Error(SIGN_IN_REQUIRED_MESSAGE);
       }
 
       // `server.env` defaults to `{}` when the constructor is called

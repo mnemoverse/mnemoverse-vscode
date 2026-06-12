@@ -77,6 +77,18 @@ export async function storeApiKey(
 }
 
 /**
+ * Read the stored API key WITHOUT prompting. The MCP provider's resolve path
+ * and the first-run welcome use this: neither may pop the paste input box —
+ * that would bypass the keyless Sign In flow (the headline of v0.2.0). Returns
+ * `undefined` when nothing is stored, so callers route the user to Sign In.
+ */
+export async function peekApiKey(
+  context: vscode.ExtensionContext,
+): Promise<string | undefined> {
+  return context.secrets.get(SECRET_KEY);
+}
+
+/**
  * Delete the stored API key. Called by the `mnemoverse.clearApiKey` command
  * and indirectly by `mnemoverse.setApiKey` (to force a re-prompt when the
  * user wants to rotate their key without reinstalling the extension).

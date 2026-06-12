@@ -10,6 +10,9 @@ import {
   parseCallback,
   normalizeApiKey,
   parseExchangeResponse,
+  SIGN_IN_REQUIRED_MESSAGE,
+  shouldPromptConnect,
+  shouldShowWelcome,
 } from "./signin-core";
 
 describe("base64urlEncode", () => {
@@ -117,5 +120,30 @@ describe("parseExchangeResponse — validate the server shape before trusting it
   it("rejects a missing / non-string / empty email", () => {
     expect(() => parseExchangeResponse({ ...good, email: undefined })).toThrow(/invalid_response_schema/);
     expect(() => parseExchangeResponse({ ...good, email: "" })).toThrow(/invalid_response_schema/);
+  });
+});
+
+describe("SIGN_IN_REQUIRED_MESSAGE — routes to keyless, not paste (regression)", () => {
+  it("points at Sign In and never at the manual Set API Key command", () => {
+    expect(SIGN_IN_REQUIRED_MESSAGE).toMatch(/Sign In/);
+    expect(SIGN_IN_REQUIRED_MESSAGE).not.toMatch(/Set API Key/);
+  });
+});
+
+describe("shouldPromptConnect — toast at most once per session, only when keyless", () => {
+  it("prompts only with no key and not yet prompted this session", () => {
+    expect(shouldPromptConnect(false, false)).toBe(true);
+    expect(shouldPromptConnect(false, true)).toBe(false); // already nagged this session
+    expect(shouldPromptConnect(true, false)).toBe(false); // connected
+    expect(shouldPromptConnect(true, true)).toBe(false);
+  });
+});
+
+describe("shouldShowWelcome — once ever, only while unconnected", () => {
+  it("shows only with no key and never-shown", () => {
+    expect(shouldShowWelcome(false, false)).toBe(true);
+    expect(shouldShowWelcome(false, true)).toBe(false); // shown before
+    expect(shouldShowWelcome(true, false)).toBe(false); // already has a key
+    expect(shouldShowWelcome(true, true)).toBe(false);
   });
 });

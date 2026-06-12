@@ -22,11 +22,21 @@ remains as a fallback.
 - Anti-phishing visual code shown in the editor and on the consent page (derived
   from the request `state`), so a relay flow the user didn't start shows a
   different code.
+- First-run welcome and an in-context connect prompt: a one-time
+  "Connect Mnemoverse memory" notification on first activation, and a
+  one-click **Sign In** toast the moment a Copilot agent reaches for a memory
+  tool without a stored key. Both route into the keyless browser flow — the
+  connect step stays human-confirmed; the toast only opens the door.
 
 ### Changed
 
 - `Set API Key` retitled to `Set API Key (paste manually)` — the manual path is
   now the fallback, not the primary.
+- The MCP provider's resolve path now reads the key **without prompting**
+  (`peekApiKey`) and, when none is stored, fails with a "Run Mnemoverse: Sign In"
+  error instead of popping the manual paste input box. Previously the most
+  common first touch — an agent using a memory tool before sign-in — bypassed
+  the keyless flow entirely and asked the user to paste a key they didn't have.
 - Key storage now goes through a single `mk_live_`-format guard on both the
   sign-in and paste paths, so a malformed key can never be persisted.
 

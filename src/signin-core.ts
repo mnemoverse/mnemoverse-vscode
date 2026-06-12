@@ -139,3 +139,35 @@ export function parseExchangeResponse(data: unknown): ExchangeResponse {
   normalizeApiKey(d.api_key); // also reject a wrong-prefix / bare-prefix key
   return data as ExchangeResponse;
 }
+
+// ---- onboarding policy (pure; vscode glue stays thin) ----------------------
+
+/**
+ * Error the MCP provider throws when it needs a key but none is stored. It
+ * points at the keyless Sign In, NOT the manual paste command — the most common
+ * first touch (a Copilot agent reaching for a memory tool) must route the user
+ * into the keyless flow, not ask them to paste a key they do not have.
+ */
+export const SIGN_IN_REQUIRED_MESSAGE =
+  'Not signed in to Mnemoverse. Run "Mnemoverse: Sign In" to connect your memory.';
+
+/**
+ * Whether to surface the one-click connect toast when something needs the API
+ * key but none is stored.
+ *
+ *  - hasKey -> never prompt (we are connected).
+ *  - promptedThisSession -> already toasted once this session; VS Code may call
+ *    resolveMcpServerDefinition repeatedly, so do not nag on every call.
+ */
+export function shouldPromptConnect(hasKey: boolean, promptedThisSession: boolean): boolean {
+  return !hasKey && !promptedThisSession;
+}
+
+/**
+ * Whether to show the first-run welcome. Once ever (gated on a persisted flag),
+ * and only while no key is stored — a user who already pasted or signed in never
+ * sees it.
+ */
+export function shouldShowWelcome(hasKey: boolean, welcomeShownEver: boolean): boolean {
+  return !hasKey && !welcomeShownEver;
+}
