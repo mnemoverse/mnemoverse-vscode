@@ -2,8 +2,9 @@ import * as vscode from "vscode";
 import { registerProvider } from "./provider";
 import { clearApiKey, getApiKey, peekApiKey } from "./auth";
 import { signIn, signOut, handleUri } from "./signin";
-import { promptConnect, wasConnectPromptShown } from "./prompts";
-import { shouldShowWelcome } from "./signin-core";
+import { promptConnect } from "./prompts";
+import { wasConnectPromptShown } from "./session";
+import { decideShowWelcome } from "./signin-core";
 
 /** globalState flag: the first-run welcome has been shown once (ever). */
 const WELCOME_SHOWN_KEY = "mnemoverse.welcomeShown";
@@ -120,16 +121,17 @@ export function activate(context: vscode.ExtensionContext): void {
     try {
       const hasKey = !!(await peekApiKey(context));
       const shownBefore = context.globalState.get<boolean>(WELCOME_SHOWN_KEY, false);
-      // Skip if a connect toast already fired this session (the provider's
-      // agent-touch path may have raced ahead) — avoids a double toast. We
-      // leave the persisted flag UNSET in that case, so the welcome still gets
-      // its one-time turn on a later session.
-      if (!shouldShowWelcome(hasKey, shownBefore) || wasConnectPromptShown()) {
+      // decideShowWelcome folds in wasConnectPromptShown() so we never double
+      // with the provider's agent-touch toast. When it returns false for THAT
+      // reason we leave the persisted flag UNSET, keeping the welcome's
+      // one-time turn for a later session. (promptConnect also self-guards, so
+      // even a race during the update() await below cannot double-toast.)
+      if (!decideShowWelcome(hasKey, shownBefore, wasConnectPromptShown())) {
         return;
       }
       await context.globalState.update(WELCOME_SHOWN_KEY, true);
       await promptConnect(
-        "Welcome to Mnemoverse. Connect your memory to use it in Copilot Chat — no API key to paste.",
+        "Welcome to Mnemoverse. Sign in from your browser to connect your memory in Copilot Chat.",
       );
     } catch (err) {
       console.error("[mnemoverse] first-run welcome failed:", err);

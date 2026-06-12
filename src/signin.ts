@@ -12,6 +12,7 @@ import {
   type ExchangeResponse,
 } from "./signin-core";
 import { storeApiKey, clearApiKey } from "./auth";
+import { resetConnectPrompt } from "./session";
 
 /**
  * Keyless browser sign-in (Route A). The user clicks "Sign In"; we open the
@@ -152,6 +153,10 @@ export async function signOut(
   fireServerChanged: () => void,
 ): Promise<void> {
   await clearApiKey(context);
+  // Re-arm the one-click connect toast: a deliberate sign-out means the user
+  // may want to reconnect (e.g. switch accounts) in the same session, and the
+  // session guard would otherwise suppress the actionable toast.
+  resetConnectPrompt();
   fireServerChanged();
   await vscode.window.showInformationMessage("Signed out of Mnemoverse.");
 }

@@ -11,8 +11,7 @@ import {
   normalizeApiKey,
   parseExchangeResponse,
   SIGN_IN_REQUIRED_MESSAGE,
-  shouldPromptConnect,
-  shouldShowWelcome,
+  decideShowWelcome,
 } from "./signin-core";
 
 describe("base64urlEncode", () => {
@@ -130,20 +129,18 @@ describe("SIGN_IN_REQUIRED_MESSAGE — routes to keyless, not paste (regression)
   });
 });
 
-describe("shouldPromptConnect — toast at most once per session, only when keyless", () => {
-  it("prompts only with no key and not yet prompted this session", () => {
-    expect(shouldPromptConnect(false, false)).toBe(true);
-    expect(shouldPromptConnect(false, true)).toBe(false); // already nagged this session
-    expect(shouldPromptConnect(true, false)).toBe(false); // connected
-    expect(shouldPromptConnect(true, true)).toBe(false);
+describe("decideShowWelcome — once ever, only unconnected, never double with the agent toast", () => {
+  it("shows only when no key AND never-shown AND no connect toast yet this session", () => {
+    expect(decideShowWelcome(false, false, false)).toBe(true);
   });
-});
-
-describe("shouldShowWelcome — once ever, only while unconnected", () => {
-  it("shows only with no key and never-shown", () => {
-    expect(shouldShowWelcome(false, false)).toBe(true);
-    expect(shouldShowWelcome(false, true)).toBe(false); // shown before
-    expect(shouldShowWelcome(true, false)).toBe(false); // already has a key
-    expect(shouldShowWelcome(true, true)).toBe(false);
+  it("suppresses when already connected", () => {
+    expect(decideShowWelcome(true, false, false)).toBe(false);
+    expect(decideShowWelcome(true, true, true)).toBe(false);
+  });
+  it("suppresses when the welcome was already shown in a past session", () => {
+    expect(decideShowWelcome(false, true, false)).toBe(false);
+  });
+  it("suppresses when the agent-touch toast already fired this session (no double)", () => {
+    expect(decideShowWelcome(false, false, true)).toBe(false);
   });
 });

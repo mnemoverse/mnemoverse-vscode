@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { peekApiKey } from "./auth";
-import { promptConnect, wasConnectPromptShown } from "./prompts";
-import { SIGN_IN_REQUIRED_MESSAGE, shouldPromptConnect } from "./signin-core";
+import { promptConnect } from "./prompts";
+import { SIGN_IN_REQUIRED_MESSAGE } from "./signin-core";
 
 /**
  * Must match the `id` field in `package.json` →
@@ -124,13 +124,12 @@ export function registerProvider(
       if (!apiKey) {
         // No key stored. Refuse to start the server so VS Code shows an
         // explicit error in Copilot Chat instead of silently 401-ing against
-        // core.mnemoverse.com — and surface a one-click "Sign In" toast (at
-        // most once per session, shared with the first-run welcome) that
-        // routes the user into the keyless flow. The error still shows on
-        // every resolve; only the toast is rate-limited.
-        if (shouldPromptConnect(false, wasConnectPromptShown())) {
-          void promptConnect();
-        }
+        // core.mnemoverse.com — and surface a one-click "Sign In" toast that
+        // routes the user into the keyless flow. promptConnect self-guards
+        // (claimConnectPrompt) so this shows at most once per session even
+        // though resolve can fire repeatedly; the thrown error still surfaces
+        // on every resolve.
+        void promptConnect();
         throw new Error(SIGN_IN_REQUIRED_MESSAGE);
       }
 

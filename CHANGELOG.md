@@ -22,11 +22,13 @@ remains as a fallback.
 - Anti-phishing visual code shown in the editor and on the consent page (derived
   from the request `state`), so a relay flow the user didn't start shows a
   different code.
-- First-run welcome and an in-context connect prompt: a one-time
-  "Connect Mnemoverse memory" notification on first activation, and a
-  one-click **Sign In** toast the moment a Copilot agent reaches for a memory
-  tool without a stored key. Both route into the keyless browser flow — the
-  connect step stays human-confirmed; the toast only opens the door.
+- First-run welcome and an in-context connect prompt: a one-time welcome
+  notification on first activation, and a one-click **Sign In** toast the moment
+  a Copilot agent reaches for a memory tool without a stored key. Both route into
+  the keyless browser flow — the connect step stays human-confirmed; the toast
+  only opens the door. A per-session guard shows at most one connect toast per
+  window (welcome and agent-touch never double up); a deliberate Sign Out re-arms
+  it.
 
 ### Changed
 

@@ -152,22 +152,22 @@ export const SIGN_IN_REQUIRED_MESSAGE =
   'Not signed in to Mnemoverse. Run "Mnemoverse: Sign In" to connect your memory.';
 
 /**
- * Whether to surface the one-click connect toast when something needs the API
- * key but none is stored.
+ * Whether to show the first-run welcome toast. Three conditions, all required:
  *
- *  - hasKey -> never prompt (we are connected).
- *  - promptedThisSession -> already toasted once this session; VS Code may call
- *    resolveMcpServerDefinition repeatedly, so do not nag on every call.
+ *  - !hasKey                       — a user who already signed in / pasted a key
+ *                                    never sees it.
+ *  - !welcomeShownEver             — once ever (gated on a persisted flag).
+ *  - !connectPromptShownThisSession — if the agent-touch path already raced ahead
+ *                                    and toasted this session, skip the welcome so
+ *                                    the user is not double-toasted; the persisted
+ *                                    flag is then left UNSET (caller's job) so the
+ *                                    welcome keeps its one-time turn for a later
+ *                                    session.
  */
-export function shouldPromptConnect(hasKey: boolean, promptedThisSession: boolean): boolean {
-  return !hasKey && !promptedThisSession;
-}
-
-/**
- * Whether to show the first-run welcome. Once ever (gated on a persisted flag),
- * and only while no key is stored — a user who already pasted or signed in never
- * sees it.
- */
-export function shouldShowWelcome(hasKey: boolean, welcomeShownEver: boolean): boolean {
-  return !hasKey && !welcomeShownEver;
+export function decideShowWelcome(
+  hasKey: boolean,
+  welcomeShownEver: boolean,
+  connectPromptShownThisSession: boolean,
+): boolean {
+  return !hasKey && !welcomeShownEver && !connectPromptShownThisSession;
 }
