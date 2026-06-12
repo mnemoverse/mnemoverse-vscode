@@ -4,6 +4,51 @@ All notable changes to the Mnemoverse Memory extension for VS Code.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] — 2026-06-12
+
+Keyless browser sign-in. First-run is now **install → "Mnemoverse: Sign In" →
+browser → done** — the user never sees or pastes an API key. The paste flow
+remains as a fallback.
+
+### Added
+
+- `Mnemoverse: Sign In` command. Opens `console.mnemoverse.com/connect/vscode`
+  in the browser; after the user approves, the console mints a key, seals it
+  under a one-time code, and hands it back via a `vscode://` callback. The
+  extension exchanges the code (PKCE S256) for the key over HTTPS and stores it
+  in SecretStorage — the same slot the MCP provider already reads, so the
+  server respawns with the new key automatically.
+- `Mnemoverse: Complete sign-in` command — manual fallback for when the browser
+  can't return the code automatically (no `vscode://` handler, remote/SSH, a
+  browser that blocks custom schemes): the consent page shows the one-time code,
+  the user pastes it here, and it's redeemed against the in-flight PKCE verifier.
+- `Mnemoverse: Sign Out` command — clears the stored key and re-resolves the server.
+- First-run welcome and an in-context connect prompt: a one-time welcome
+  notification on first activation, and a one-click **Sign In** toast the moment
+  a Copilot agent reaches for a memory tool without a stored key. Both route into
+  the keyless browser flow — the connect step stays human-confirmed; the toast
+  only opens the door. A per-session guard shows at most one connect toast per
+  window (welcome and agent-touch never double up); a deliberate Sign Out re-arms
+  it.
+
+### Changed
+
+- `Set API Key` retitled to `Set API Key (paste manually)` — the manual path is
+  now the fallback, not the primary.
+- The MCP provider's resolve path now reads the key **without prompting**
+  (`peekApiKey`) and, when none is stored, fails with a "Run Mnemoverse: Sign In"
+  error instead of popping the manual paste input box. Previously the most
+  common first touch — an agent using a memory tool before sign-in — bypassed
+  the keyless flow entirely and asked the user to paste a key they didn't have.
+- Key storage now goes through a single `mk_live_`-format guard on both the
+  sign-in and paste paths, so a malformed key can never be persisted.
+
+### Security
+
+- One-time code is 256-bit, single-use, 10-min TTL, PKCE-bound; the raw key
+  never appears in a URL, a log, or the callback. Exchange responses are
+  schema-validated before the key is trusted.
+
 ## [0.1.1] — 2026-04-13
 
 Self-review patch. v0.1.0 shipped to both registries within ~10 minutes

@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { normalizeApiKey } from "./signin-core";
 
 /**
  * Key under which the Mnemoverse API key is stored in the extension's
@@ -41,7 +42,7 @@ export async function getApiKey(
       if (!trimmed) {
         return "API key is required";
       }
-      if (!trimmed.startsWith("mk_live_")) {
+      if (!trimmed.startsWith("mk_live_") || trimmed.length <= "mk_live_".length) {
         return 'Key should start with "mk_live_" — get yours at console.mnemoverse.com';
       }
       return undefined;
@@ -52,9 +53,39 @@ export async function getApiKey(
     return undefined;
   }
 
-  const key = entered.trim();
+  // Persist through the same guard the keyless flow uses, so the paste path
+  // can't store a bare/empty/wrong-prefix key either (validateInput already
+  // blocks it in the UI; this is the single, authoritative store gate).
+  const key = normalizeApiKey(entered);
   await context.secrets.store(SECRET_KEY, key);
   return key;
+}
+
+/**
+ * Store an API key obtained WITHOUT a prompt — used by the keyless browser
+ * sign-in flow after it exchanges the one-time code for the real key. Writes to
+ * the SAME SecretStorage slot getApiKey reads, so the MCP provider picks it up
+ * with zero changes to its injection path.
+ */
+export async function storeApiKey(
+  context: vscode.ExtensionContext,
+  key: string,
+): Promise<void> {
+  // Reject a malformed key (same check getApiKey applies to pasted keys) so a
+  // bad value from any source can't silently break later auth.
+  await context.secrets.store(SECRET_KEY, normalizeApiKey(key));
+}
+
+/**
+ * Read the stored API key WITHOUT prompting. The MCP provider's resolve path
+ * and the first-run welcome use this: neither may pop the paste input box —
+ * that would bypass the keyless Sign In flow (the headline of v0.2.0). Returns
+ * `undefined` when nothing is stored, so callers route the user to Sign In.
+ */
+export async function peekApiKey(
+  context: vscode.ExtensionContext,
+): Promise<string | undefined> {
+  return context.secrets.get(SECRET_KEY);
 }
 
 /**

@@ -1,5 +1,7 @@
 import * as vscode from "vscode";
-import { getApiKey } from "./auth";
+import { peekApiKey } from "./auth";
+import { promptConnect } from "./prompts";
+import { SIGN_IN_REQUIRED_MESSAGE } from "./signin-core";
 
 /**
  * Must match the `id` field in `package.json` →
@@ -31,13 +33,14 @@ const PROVIDER_ID = "mnemoverse.memory";
  *   - `resolveMcpServerDefinition(server, token)` — optional but we
  *     implement it. Called right before VS Code spawns the server. THIS
  *     is where we pull the API key from `SecretStorage` and inject it
- *     into the env map, prompting the user if they haven't entered one
- *     yet.
+ *     into the env map. It reads the key WITHOUT prompting (`peekApiKey`):
+ *     if none is stored we throw a "Sign In" error and surface a one-click
+ *     connect toast, routing the user into the keyless flow rather than
+ *     popping a paste box for a key they do not have.
  *
  * Both methods accept a `CancellationToken` parameter that VS Code uses
  * to abort long-running work during shutdown or rapid activation. We
- * honour it at the top of `resolveMcpServerDefinition` (the prompt path
- * is the only slow part).
+ * honour it at the top of `resolveMcpServerDefinition`.
  *
  * Returning a `Disposable` lets `extension.ts` add it to
  * `context.subscriptions` so the provider unregisters cleanly when the
@@ -45,6 +48,7 @@ const PROVIDER_ID = "mnemoverse.memory";
  */
 export function registerProvider(
   context: vscode.ExtensionContext,
+  onDidChangeServerDefinitions?: vscode.Event<void>,
 ): vscode.Disposable {
   // VS Code uses `McpStdioServerDefinition.version` as a cache key for
   // the server's tool list — when it changes, the editor re-fetches.
@@ -63,9 +67,13 @@ export function registerProvider(
     "0.0.0";
 
   return vscode.lm.registerMcpServerDefinitionProvider(PROVIDER_ID, {
-    // `onDidChangeMcpServerDefinitions` is optional per the interface
-    // (`readonly onDidChangeMcpServerDefinitions?: Event<void>;`) and
-    // we have a static list, so we omit the field entirely.
+    // Fired by extension.ts after a successful sign-in / sign-out so VS Code
+    // re-runs resolveMcpServerDefinition and respawns the server with the new
+    // (or cleared) key — without it the user would have to restart the server
+    // manually after signing in. Owned + disposed by extension.ts (the emitter
+    // lives in context.subscriptions), so registering its event here leaks
+    // nothing across activations.
+    onDidChangeMcpServerDefinitions: onDidChangeServerDefinitions,
 
     provideMcpServerDefinitions: async (
       _token: vscode.CancellationToken,
@@ -106,19 +114,23 @@ export function registerProvider(
         return server;
       }
 
-      const apiKey = await getApiKey(context);
+      // Read-only — must NOT prompt here. A paste box from resolve would
+      // bypass the keyless Sign In (the headline of v0.2.0) on the most
+      // common first touch: a Copilot agent reaching for a memory tool.
+      const apiKey = await peekApiKey(context);
       if (token.isCancellationRequested) {
         throw new vscode.CancellationError();
       }
       if (!apiKey) {
-        // User cancelled the API-key prompt. Refuse to start the server
-        // so VS Code shows an explicit error in Copilot Chat instead of
-        // silently failing with a 401 from core.mnemoverse.com. The user
-        // can run `Mnemoverse: Set API Key` from the command palette to
-        // try again.
-        throw new Error(
-          'Mnemoverse API key required. Run "Mnemoverse: Set API Key" from the command palette to enter one.',
-        );
+        // No key stored. Refuse to start the server so VS Code shows an
+        // explicit error in Copilot Chat instead of silently 401-ing against
+        // core.mnemoverse.com — and surface a one-click "Sign In" toast that
+        // routes the user into the keyless flow. promptConnect self-guards
+        // (claimConnectPrompt) so this shows at most once per session even
+        // though resolve can fire repeatedly; the thrown error still surfaces
+        // on every resolve.
+        void promptConnect();
+        throw new Error(SIGN_IN_REQUIRED_MESSAGE);
       }
 
       // `server.env` defaults to `{}` when the constructor is called

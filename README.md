@@ -1,6 +1,6 @@
 # Mnemoverse Memory for VS Code
 
-> Persistent memory for GitHub Copilot Chat Agent Mode — one API key, every AI tool.
+> Persistent memory for GitHub Copilot Chat Agent Mode — one memory, every AI tool.
 
 [![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/Mnemoverse.mnemoverse-vscode?label=VS%20Code%20Marketplace&color=0098ff)](https://marketplace.visualstudio.com/items?itemName=Mnemoverse.mnemoverse-vscode)
 [![Open VSX](https://img.shields.io/open-vsx/v/mnemoverse/mnemoverse-vscode?label=Open%20VSX&color=c160ef)](https://open-vsx.org/extension/mnemoverse/mnemoverse-vscode)
@@ -10,7 +10,7 @@
 
 ## What this extension does
 
-**Adds Mnemoverse Memory as an MCP server inside GitHub Copilot Chat's Agent Mode**, with no `.vscode/mcp.json` file to edit and no JSON config to commit. Once installed and given an API key, your Copilot agent gains six tools for long-term memory: it can store facts, preferences, and decisions during one chat and recall them from any future chat — across sessions, branches, and projects.
+**Adds Mnemoverse Memory as an MCP server inside GitHub Copilot Chat's Agent Mode**, with no `.vscode/mcp.json` file to edit and no JSON config to commit. Once installed and connected, your Copilot agent gains six tools for long-term memory: it can store facts, preferences, and decisions during one chat and recall them from any future chat — across sessions, branches, and projects.
 
 ### Scope (honest)
 
@@ -35,16 +35,16 @@ Write a memory in any of the tools above → read it from any other. **Same Mnem
 
 - **VS Code 1.102** or newer — required for the `registerMcpServerDefinitionProvider` API this extension uses
 - **GitHub Copilot Chat** extension installed and signed in
-- A free **Mnemoverse API key** — sign up at [console.mnemoverse.com](https://console.mnemoverse.com), no credit card
+- A free **Mnemoverse account** — sign up at [console.mnemoverse.com](https://console.mnemoverse.com), no credit card (you connect from VS Code in one click — no key to copy or paste)
 - **Node.js** on your PATH — the extension spawns `npx` to run the memory server
 
 ## Install
 
 1. Search for **"Mnemoverse Memory"** in the VS Code Marketplace and click **Install**.
-2. Open Copilot Chat (`Cmd/Ctrl+Shift+I`) and switch the mode picker to **Agent**. MCP servers only show there.
-3. Ask the agent to remember something. On first run VS Code will prompt you for an API key — paste yours and it's stored in the OS keychain, never on disk.
+2. Run **`Mnemoverse: Sign In`** from the Command Palette (or click **Sign In** on the welcome notification). Your browser opens `console.mnemoverse.com`; approve the connection and you're connected. No API key to copy or paste: the key is minted for you and stored in the OS keychain, never on disk.
+3. Open Copilot Chat (`Cmd/Ctrl+Shift+I`), switch the mode picker to **Agent** (MCP servers only show there), and ask the agent to remember something.
 
-You can also run the `Mnemoverse: Set API Key` command from the palette to enter your key up front.
+If your browser can't return you to VS Code automatically (some remote/SSH setups, or a browser that blocks custom URL schemes), copy the code the page shows and run **`Mnemoverse: Complete sign-in`** to paste it. Or skip the browser entirely and paste a key by hand with **`Mnemoverse: Set API Key (paste manually)`** — keyless Sign In is just the default.
 
 ## Try it
 
@@ -73,8 +73,11 @@ If Copilot recalls Railway, everything is wired up. The memory persists across s
 
 | Command | What it does |
 | ------- | ------------ |
-| `Mnemoverse: Set API Key` | Enter or rotate your API key. Clears any existing one first. |
-| `Mnemoverse: Clear API Key` | Remove the stored API key. Next server start re-prompts. |
+| `Mnemoverse: Sign In` | Connect your memory via the browser — no key to paste. The default. |
+| `Mnemoverse: Complete sign-in` | Finish a Sign In when the browser couldn't return automatically — paste the code from the page. |
+| `Mnemoverse: Sign Out` | Disconnect and clear the stored key. |
+| `Mnemoverse: Set API Key (paste manually)` | Fallback: paste a key directly. Clears any existing one first. |
+| `Mnemoverse: Clear API Key` | Remove the stored key. The server won't start until you reconnect. |
 | `Mnemoverse: Open Documentation` | Open the docs in your default browser. |
 
 ## How it works (internals)

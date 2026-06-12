@@ -1,34 +1,79 @@
 import * as vscode from "vscode";
 import { registerProvider } from "./provider";
-import { clearApiKey, getApiKey } from "./auth";
+import { clearApiKey, getApiKey, peekApiKey } from "./auth";
+import { signIn, signOut, handleUri, completeSignIn } from "./signin";
+import { promptConnect } from "./prompts";
+import { wasConnectPromptShown } from "./session";
+import { decideShowWelcome } from "./signin-core";
+
+/** globalState flag: the first-run welcome has been shown once (ever). */
+const WELCOME_SHOWN_KEY = "mnemoverse.welcomeShown";
 
 /**
  * Extension entry point. Called by VS Code after activation
  * (`activationEvents: ["onStartupFinished"]` in package.json).
  *
- * Three things happen here:
+ * Four things happen here:
  *
  *   1. Register the MCP server definition provider. VS Code's Copilot
  *      Chat Agent Mode will call into it whenever the user spawns our
  *      server.
- *   2. Register three commands (Set / Clear / Open Docs) so the user
- *      can manage their API key and jump to documentation from the
- *      command palette without leaving VS Code.
- *   3. Push every registration into `context.subscriptions` so VS Code
- *      cleans them up when the extension deactivates.
+ *   2. Register the URI handler for the keyless sign-in callback.
+ *   3. Register the commands (Sign In / Sign Out / Set / Clear / Open
+ *      Docs) so the user can connect, manage their key, and jump to
+ *      documentation from the command palette without leaving VS Code.
+ *   4. Push every registration into `context.subscriptions` so VS Code
+ *      cleans them up when the extension deactivates, then show the
+ *      one-time first-run welcome if no key is stored yet.
  *
  * Each command handler is wrapped so that unexpected errors (keychain
  * locked, browser not found, SecretStorage inaccessible) surface as a
  * visible `showErrorMessage` rather than being silently swallowed by
  * the command runner.
  *
- * v0.1.x deliberately has NO status bar, NO welcome notification, NO
- * OAuth. Those slot in after Phase 2 (Remote MCP server) without
- * changing the provider wiring.
+ * No status bar and no server-side OAuth yet — those slot in after the
+ * Remote MCP server (v0.3) without changing the provider wiring.
  */
 export function activate(context: vscode.ExtensionContext): void {
+  // Fired after sign-in / sign-out so VS Code re-resolves the MCP server with
+  // the new (or cleared) key. Owned here and disposed via subscriptions.
+  const serverChanged = new vscode.EventEmitter<void>();
+  const fireServerChanged = () => serverChanged.fire();
+
   context.subscriptions.push(
-    registerProvider(context),
+    serverChanged,
+    registerProvider(context, serverChanged.event),
+
+    // Browser keyless sign-in returns here via vscode://Mnemoverse.mnemoverse-vscode/auth-callback.
+    vscode.window.registerUriHandler({
+      handleUri: (uri) => {
+        void handleUri(uri);
+      },
+    }),
+
+    vscode.commands.registerCommand("mnemoverse.signIn", async () => {
+      try {
+        await signIn(context, fireServerChanged);
+      } catch (err) {
+        await showCommandError("Failed to sign in to Mnemoverse", err);
+      }
+    }),
+
+    vscode.commands.registerCommand("mnemoverse.completeSignIn", async () => {
+      try {
+        await completeSignIn();
+      } catch (err) {
+        await showCommandError("Failed to complete Mnemoverse sign-in", err);
+      }
+    }),
+
+    vscode.commands.registerCommand("mnemoverse.signOut", async () => {
+      try {
+        await signOut(context, fireServerChanged);
+      } catch (err) {
+        await showCommandError("Failed to sign out of Mnemoverse", err);
+      }
+    }),
 
     vscode.commands.registerCommand("mnemoverse.setApiKey", async () => {
       try {
@@ -37,6 +82,7 @@ export function activate(context: vscode.ExtensionContext): void {
         await clearApiKey(context);
         const key = await getApiKey(context);
         if (key) {
+          fireServerChanged();
           await vscode.window.showInformationMessage(
             "Mnemoverse API key saved.",
           );
@@ -49,6 +95,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("mnemoverse.clearApiKey", async () => {
       try {
         await clearApiKey(context);
+        fireServerChanged();
         await vscode.window.showInformationMessage(
           "Mnemoverse API key cleared.",
         );
@@ -70,6 +117,34 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
   );
+
+  // First-run welcome: if no key is stored and we have never shown it, offer
+  // the one-click keyless Sign In. `peekApiKey` never prompts, so this cannot
+  // pop a paste box. The flag is persisted BEFORE the toast so it shows once
+  // ever — a dismissed welcome is not re-shown on the next launch (the
+  // agent-touch path in provider.ts still catches an unconnected user when
+  // they actually reach for memory). Fire-and-forget: activation never blocks
+  // on a toast.
+  void (async () => {
+    try {
+      const hasKey = !!(await peekApiKey(context));
+      const shownBefore = context.globalState.get<boolean>(WELCOME_SHOWN_KEY, false);
+      // decideShowWelcome folds in wasConnectPromptShown() so we never double
+      // with the provider's agent-touch toast. When it returns false for THAT
+      // reason we leave the persisted flag UNSET, keeping the welcome's
+      // one-time turn for a later session. (promptConnect also self-guards, so
+      // even a race during the update() await below cannot double-toast.)
+      if (!decideShowWelcome(hasKey, shownBefore, wasConnectPromptShown())) {
+        return;
+      }
+      await context.globalState.update(WELCOME_SHOWN_KEY, true);
+      await promptConnect(
+        "Welcome to Mnemoverse. Sign in from your browser to connect your memory in Copilot Chat.",
+      );
+    } catch (err) {
+      console.error("[mnemoverse] first-run welcome failed:", err);
+    }
+  })();
 }
 
 export function deactivate(): void {
