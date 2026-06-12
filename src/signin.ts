@@ -197,7 +197,7 @@ function reportOutcome(o: Outcome): void {
       return;
     case "timeout":
       void vscode.window.showWarningMessage(
-        'Mnemoverse sign-in timed out. Run "Mnemoverse: Sign In" to try again, or paste a key with "Set API Key".',
+        'Mnemoverse sign-in timed out. Run "Mnemoverse: Sign In" to try again, or paste a key with "Mnemoverse: Set API Key (paste manually)".',
       );
       return;
     case "exchange":
