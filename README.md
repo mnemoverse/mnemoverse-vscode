@@ -41,10 +41,10 @@ Write a memory in any of the tools above → read it from any other. **Same Mnem
 ## Install
 
 1. Search for **"Mnemoverse Memory"** in the VS Code Marketplace and click **Install**.
-2. Run **`Mnemoverse: Sign In`** from the Command Palette (or click **Sign In** on the welcome notification). Your browser opens `console.mnemoverse.com`; approve the connection — check that the short code on the page matches the one VS Code shows — and you're connected. No API key to copy or paste: the key is minted for you and stored in the OS keychain, never on disk.
+2. Run **`Mnemoverse: Sign In`** from the Command Palette (or click **Sign In** on the welcome notification). Your browser opens `console.mnemoverse.com`; approve the connection and you're connected. No API key to copy or paste: the key is minted for you and stored in the OS keychain, never on disk.
 3. Open Copilot Chat (`Cmd/Ctrl+Shift+I`), switch the mode picker to **Agent** (MCP servers only show there), and ask the agent to remember something.
 
-Prefer to paste a key by hand? Run **`Mnemoverse: Set API Key (paste manually)`** from the palette instead — keyless Sign In is just the default.
+If your browser can't return you to VS Code automatically (some remote/SSH setups, or a browser that blocks custom URL schemes), copy the code the page shows and run **`Mnemoverse: Complete sign-in`** to paste it. Or skip the browser entirely and paste a key by hand with **`Mnemoverse: Set API Key (paste manually)`** — keyless Sign In is just the default.
 
 ## Try it
 
@@ -74,6 +74,7 @@ If Copilot recalls Railway, everything is wired up. The memory persists across s
 | Command | What it does |
 | ------- | ------------ |
 | `Mnemoverse: Sign In` | Connect your memory via the browser — no key to paste. The default. |
+| `Mnemoverse: Complete sign-in` | Finish a Sign In when the browser couldn't return automatically — paste the code from the page. |
 | `Mnemoverse: Sign Out` | Disconnect and clear the stored key. |
 | `Mnemoverse: Set API Key (paste manually)` | Fallback: paste a key directly. Clears any existing one first. |
 | `Mnemoverse: Clear API Key` | Remove the stored key. The server won't start until you reconnect. |

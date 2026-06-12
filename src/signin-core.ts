@@ -45,18 +45,6 @@ export async function generatePkce(): Promise<{ verifier: string; challenge: str
   return { verifier, challenge };
 }
 
-// Cross-side anti-phishing visual code (§7). MUST equal the portal's
-// deriveConfirmCode(state): 8 chars of SHA-256(utf8 state) over this 32-char
-// alphabet (byte & 31), formatted XXXX-XXXX. Golden: "golden-vector-state" → "5V9K-DASW".
-const CONFIRM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-export async function deriveConfirmCode(state: string): Promise<string> {
-  const d = await sha256(state);
-  let out = "";
-  for (let i = 0; i < 8; i++) out += CONFIRM_ALPHABET[d[i] & 31];
-  return `${out.slice(0, 4)}-${out.slice(4)}`;
-}
-
 export function buildRedirectUri(uriScheme: string): string {
   return `${uriScheme}://${REDIRECT_AUTHORITY}${REDIRECT_PATH}`;
 }

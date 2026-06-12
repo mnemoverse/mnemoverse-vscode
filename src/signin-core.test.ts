@@ -4,7 +4,6 @@ import {
   base64urlEncode,
   generateState,
   generatePkce,
-  deriveConfirmCode,
   buildRedirectUri,
   buildConnectUrl,
   parseCallback,
@@ -35,16 +34,6 @@ describe("generatePkce", () => {
     expect(challenge).toMatch(/^[A-Za-z0-9_-]{43}$/);
     const d = new Uint8Array(await wc.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
     expect(challenge).toBe(base64urlEncode(d));
-  });
-});
-
-describe("deriveConfirmCode — MUST match the portal golden vector", () => {
-  it("'golden-vector-state' → 5V9K-DASW (cross-side contract with portal connect-page.ts)", async () => {
-    expect(await deriveConfirmCode("golden-vector-state")).toBe("5V9K-DASW");
-  });
-  it("is deterministic, formatted XXXX-XXXX, safe alphabet", async () => {
-    expect(await deriveConfirmCode("x")).toBe(await deriveConfirmCode("x"));
-    expect(await deriveConfirmCode("x")).toMatch(/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/);
   });
 });
 

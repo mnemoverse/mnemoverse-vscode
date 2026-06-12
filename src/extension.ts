@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { registerProvider } from "./provider";
 import { clearApiKey, getApiKey, peekApiKey } from "./auth";
-import { signIn, signOut, handleUri } from "./signin";
+import { signIn, signOut, handleUri, completeSignIn } from "./signin";
 import { promptConnect } from "./prompts";
 import { wasConnectPromptShown } from "./session";
 import { decideShowWelcome } from "./signin-core";
@@ -56,6 +56,14 @@ export function activate(context: vscode.ExtensionContext): void {
         await signIn(context, fireServerChanged);
       } catch (err) {
         await showCommandError("Failed to sign in to Mnemoverse", err);
+      }
+    }),
+
+    vscode.commands.registerCommand("mnemoverse.completeSignIn", async () => {
+      try {
+        await completeSignIn();
+      } catch (err) {
+        await showCommandError("Failed to complete Mnemoverse sign-in", err);
       }
     }),
 

@@ -3,7 +3,6 @@ import * as os from "node:os";
 import {
   generateState,
   generatePkce,
-  deriveConfirmCode,
   buildRedirectUri,
   buildConnectUrl,
   parseCallback,
@@ -76,7 +75,6 @@ export async function signIn(
     name: defaultKeyName(),
     editor: scheme,
   });
-  const confirmCode = await deriveConfirmCode(state);
 
   // Arm the attempt (pending + timer + outcome promise) BEFORE opening the
   // browser, so a very fast callback isn't dropped and an openExternal failure
@@ -105,7 +103,12 @@ export async function signIn(
   const outcome = await vscode.window.withProgress<Outcome>(
     {
       location: vscode.ProgressLocation.Notification,
-      title: `Finish signing in to Mnemoverse in your browser. Confirm the code matches: ${confirmCode}`,
+      // No confirm-code to compare: security is carried by PKCE + state match +
+      // the redirect allowlist + the session-gated mint on the real console
+      // domain. The user just approves on the consent page. If the browser
+      // can't hand the code back automatically, the page offers a paste fallback
+      // wired to the "Mnemoverse: Complete sign-in" command.
+      title: "Finishing Mnemoverse sign-in in your browser…",
       cancellable: true,
     },
     (_progress, token) => {
@@ -134,8 +137,18 @@ export async function handleUri(uri: vscode.Uri): Promise<void> {
     p.settle({ ok: false, reason: "denied" });
     return;
   }
+  await redeemCode(p, result.code);
+}
+
+/**
+ * Redeem a one-time code against an in-flight attempt's PKCE verifier, store the
+ * key, and settle the attempt. Shared by the automatic `vscode://` callback
+ * (handleUri) and the manual paste fallback (completeSignIn) — same exchange,
+ * the code just arrives via a different transport.
+ */
+async function redeemCode(p: Pending, code: string): Promise<void> {
   try {
-    const data = await exchange(result.code, p.verifier);
+    const data = await exchange(code, p.verifier);
     // The exchange burned the one-time code. If the attempt was cancelled /
     // timed out / superseded WHILE it was in flight, `pending` was cleared (or
     // replaced) — do NOT store a key for an attempt the user abandoned.
@@ -146,6 +159,38 @@ export async function handleUri(uri: vscode.Uri): Promise<void> {
   } catch (err) {
     p.settle({ ok: false, reason: "exchange", detail: err instanceof Error ? err.message : String(err) });
   }
+}
+
+/**
+ * Manual fallback for when the browser can't hand the code back automatically
+ * (no `vscode://` handler registered, remote/SSH sessions, a browser that blocks
+ * custom schemes). The consent page shows the one-time code and tells the user
+ * to run this command; they paste it here and we redeem it with the in-flight
+ * attempt's PKCE verifier. Requires an active Sign In — the verifier lives only
+ * in `pending`, never on disk. The wrong code (e.g. from another flow) fails the
+ * PKCE check server-side, so pasting is safe.
+ */
+export async function completeSignIn(): Promise<void> {
+  const p = pending;
+  if (!p) {
+    await vscode.window.showInformationMessage(
+      'No Mnemoverse sign-in is in progress. Run "Mnemoverse: Sign In" first, then paste the code from the browser.',
+    );
+    return;
+  }
+  const entered = await vscode.window.showInputBox({
+    title: "Complete Mnemoverse sign-in",
+    prompt: "Paste the code shown on the Mnemoverse connect page in your browser.",
+    placeHolder: "code from console.mnemoverse.com",
+    ignoreFocusOut: true,
+    validateInput: (v) => (v.trim().length === 0 ? "Paste the code from the browser" : undefined),
+  });
+  if (!entered) {
+    return; // user dismissed the box — leave the attempt running for the auto-callback
+  }
+  // redeemCode settles `pending`, which resolves the in-flight signIn's progress
+  // notification → reportOutcome fires there. No second report here.
+  await redeemCode(p, entered.trim());
 }
 
 export async function signOut(

@@ -18,10 +18,11 @@ remains as a fallback.
   extension exchanges the code (PKCE S256) for the key over HTTPS and stores it
   in SecretStorage — the same slot the MCP provider already reads, so the
   server respawns with the new key automatically.
+- `Mnemoverse: Complete sign-in` command — manual fallback for when the browser
+  can't return the code automatically (no `vscode://` handler, remote/SSH, a
+  browser that blocks custom schemes): the consent page shows the one-time code,
+  the user pastes it here, and it's redeemed against the in-flight PKCE verifier.
 - `Mnemoverse: Sign Out` command — clears the stored key and re-resolves the server.
-- Anti-phishing visual code shown in the editor and on the consent page (derived
-  from the request `state`), so a relay flow the user didn't start shows a
-  different code.
 - First-run welcome and an in-context connect prompt: a one-time welcome
   notification on first activation, and a one-click **Sign In** toast the moment
   a Copilot agent reaches for a memory tool without a stored key. Both route into
