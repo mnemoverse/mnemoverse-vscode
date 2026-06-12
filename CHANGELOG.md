@@ -4,6 +4,38 @@ All notable changes to the Mnemoverse Memory extension for VS Code.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] — 2026-06-12
+
+Keyless browser sign-in. First-run is now **install → "Mnemoverse: Sign In" →
+browser → done** — the user never sees or pastes an API key. The paste flow
+remains as a fallback.
+
+### Added
+
+- `Mnemoverse: Sign In` command. Opens `console.mnemoverse.com/connect/vscode`
+  in the browser; after the user approves, the console mints a key, seals it
+  under a one-time code, and hands it back via a `vscode://` callback. The
+  extension exchanges the code (PKCE S256) for the key over HTTPS and stores it
+  in SecretStorage — the same slot the MCP provider already reads, so the
+  server respawns with the new key automatically.
+- `Mnemoverse: Sign Out` command — clears the stored key and re-resolves the server.
+- Anti-phishing visual code shown in the editor and on the consent page (derived
+  from the request `state`), so a relay flow the user didn't start shows a
+  different code.
+
+### Changed
+
+- `Set API Key` retitled to `Set API Key (paste manually)` — the manual path is
+  now the fallback, not the primary.
+- Key storage now goes through a single `mk_live_`-format guard on both the
+  sign-in and paste paths, so a malformed key can never be persisted.
+
+### Security
+
+- One-time code is 256-bit, single-use, 10-min TTL, PKCE-bound; the raw key
+  never appears in a URL, a log, or the callback. Exchange responses are
+  schema-validated before the key is trusted.
+
 ## [0.1.1] — 2026-04-13
 
 Self-review patch. v0.1.0 shipped to both registries within ~10 minutes

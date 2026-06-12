@@ -2,7 +2,7 @@
   "name": "mnemoverse-vscode",
   "displayName": "Mnemoverse Memory",
   "description": "Persistent memory for GitHub Copilot Chat Agent Mode. Your memories sync across Claude, Cursor, ChatGPT, and other Mnemoverse-connected tools.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "publisher": "Mnemoverse",
   "preview": true,
   "pricing": "Free",

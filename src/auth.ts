@@ -42,7 +42,7 @@ export async function getApiKey(
       if (!trimmed) {
         return "API key is required";
       }
-      if (!trimmed.startsWith("mk_live_")) {
+      if (!trimmed.startsWith("mk_live_") || trimmed.length <= "mk_live_".length) {
         return 'Key should start with "mk_live_" — get yours at console.mnemoverse.com';
       }
       return undefined;
@@ -53,7 +53,10 @@ export async function getApiKey(
     return undefined;
   }
 
-  const key = entered.trim();
+  // Persist through the same guard the keyless flow uses, so the paste path
+  // can't store a bare/empty/wrong-prefix key either (validateInput already
+  // blocks it in the UI; this is the single, authoritative store gate).
+  const key = normalizeApiKey(entered);
   await context.secrets.store(SECRET_KEY, key);
   return key;
 }
