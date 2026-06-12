@@ -1,6 +1,6 @@
 # Mnemoverse Memory for VS Code
 
-> Persistent memory for GitHub Copilot Chat Agent Mode — one API key, every AI tool.
+> Persistent memory for GitHub Copilot Chat Agent Mode — one memory, every AI tool.
 
 [![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/Mnemoverse.mnemoverse-vscode?label=VS%20Code%20Marketplace&color=0098ff)](https://marketplace.visualstudio.com/items?itemName=Mnemoverse.mnemoverse-vscode)
 [![Open VSX](https://img.shields.io/open-vsx/v/mnemoverse/mnemoverse-vscode?label=Open%20VSX&color=c160ef)](https://open-vsx.org/extension/mnemoverse/mnemoverse-vscode)
