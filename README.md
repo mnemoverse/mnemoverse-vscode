@@ -2,7 +2,7 @@
 
 > Persistent memory for GitHub Copilot Chat Agent Mode — one memory, every AI tool.
 
-[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/Mnemoverse.mnemoverse-vscode?label=VS%20Code%20Marketplace&color=0098ff)](https://marketplace.visualstudio.com/items?itemName=Mnemoverse.mnemoverse-vscode)
+[![VS Code Marketplace](https://vsmarketplacebadges.dev/version-short/Mnemoverse.mnemoverse-vscode.svg)](https://marketplace.visualstudio.com/items?itemName=Mnemoverse.mnemoverse-vscode)
 [![Open VSX](https://img.shields.io/open-vsx/v/mnemoverse/mnemoverse-vscode?label=Open%20VSX&color=c160ef)](https://open-vsx.org/extension/mnemoverse/mnemoverse-vscode)
 [![npm](https://img.shields.io/npm/v/@mnemoverse/mcp-memory-server.svg?color=cb3837&label=mcp%20server)](https://www.npmjs.com/package/@mnemoverse/mcp-memory-server)
 [![MCP Registry](https://img.shields.io/badge/MCP_Registry-listed-0ea5e9)](https://registry.modelcontextprotocol.io/v0.1/servers?search=mnemoverse)
