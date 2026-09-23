@@ -121,6 +121,11 @@
         "category": "Mnemoverse"
       },
       {
+        "command": "mnemoverse.addToCursor",
+        "title": "Add to Cursor (all windows)",
+        "category": "Mnemoverse"
+      },
+      {
         "command": "mnemoverse.useHostedConnection",
         "title": "Use Hosted Connection (no Node.js)",
         "category": "Mnemoverse"
@@ -178,6 +183,10 @@
         {
           "command": "mnemoverse.useLocalConnection",
           "when": "mnemoverse.host == lm && config.mnemoverse.connection == hosted"
+        },
+        {
+          "command": "mnemoverse.addToCursor",
+          "when": "mnemoverse.host == cursor"
         }
       ]
     },
@@ -225,12 +234,13 @@
           },
           {
             "id": "connect.cursor",
-            "title": "Sign in from Cursor's MCP settings",
-            "description": "The extension added Mnemoverse to Cursor's MCP servers. Open Cursor Settings → Tools & MCPs and click Connect next to it; Cursor signs you in through the browser.\n[Open MCP settings](command:mnemoverse.openMcpSettings)",
+            "title": "Add Mnemoverse to Cursor and sign in",
+            "description": "Add Mnemoverse to your Cursor MCP settings so every window can use it, including the Agents Window, which runs no extensions. Then click Connect next to it; Cursor signs you in through the browser.\n[Add to Cursor (all windows)](command:mnemoverse.addToCursor)\n[Open MCP settings](command:mnemoverse.openMcpSettings)",
             "media": {
               "markdown": "media/walkthrough/connect-cursor.md"
             },
             "completionEvents": [
+              "onCommand:mnemoverse.addToCursor",
               "onCommand:mnemoverse.openMcpSettings"
             ],
             "when": "mnemoverse.host == cursor"

@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { EDITORS_GUIDE_URL, canBrowserSignIn, mcpConfigTargetFor } from "./hosts";
 import { localDay } from "./rating-core";
-import { appName, describeState, getConnectionMode, getHost, hasKey } from "./state";
+import { appName, describeState, getConnectionMode, getHost, hasKey, isAlreadyConfigured } from "./state";
 import { openCursorMcpSettings } from "./cursor";
 import { explainGuidance } from "./guidance";
 import { log } from "./log";
@@ -72,6 +72,13 @@ export function buildMenuItems(): MenuItem[] {
       }
       break;
     case "cursor":
+      if (!isAlreadyConfigured()) {
+        // The in-window registration doesn't reach the Agents Window; the
+        // user's own settings entry does. Lead with that.
+        items.push(
+          commandItem("$(add) Add to Cursor (all windows)", "mnemoverse.addToCursor", "Adds Mnemoverse to your Cursor MCP settings, including the Agents Window"),
+        );
+      }
       items.push(commandItem("$(sign-in) Open MCP settings to sign in", "mnemoverse.openMcpSettings"));
       break;
     case "guidance":

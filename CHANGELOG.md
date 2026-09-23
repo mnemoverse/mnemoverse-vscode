@@ -27,6 +27,16 @@ something.
   shell wrappers do not. Those files are only read, and only when they are small
   regular files (a workspace file must not be a symlink), so a repository cannot
   stall activation with a FIFO or a link to a device.
+- **Add to Cursor (all windows).** Cursor's Agents Window runs no extensions
+  (checked on Cursor 3.21: with `--glass`, even an explicitly loaded extension
+  is absent), so the in-window registration never reaches it. The Cursor notice,
+  Sign In, the status bar menu and the walkthrough now lead with
+  `Mnemoverse: Add to Cursor (all windows)`: it opens Cursor's documented MCP
+  install deeplink, Cursor asks the user to confirm, and `mnemoverse` lands in
+  the user's Cursor MCP settings (the server address only). The extension then
+  watches for that entry (for three minutes, and again whenever the window gets
+  focus), and once it appears it withdraws its own `extension-mnemoverse` so the
+  tools are not listed twice. The README gets an **Add to Cursor** button.
 - **Setup guidance for editors without a usable extension API** — Kiro,
   Windsurf / Devin Desktop, Trae, Antigravity, and any editor without
   `vscode.lm`: one first-run notice saying so, with **Copy config** and

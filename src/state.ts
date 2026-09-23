@@ -210,7 +210,11 @@ export function describeState(): { label: string; detail: string } {
             label: "In your MCP config",
             detail: `Cursor uses the Mnemoverse entry ${describeConfiguredEntry(found)}; this extension added nothing. Cursor runs its sign-in (Cursor Settings → Tools & MCPs).`,
           }
-        : { label: "Added to Cursor", detail: "Sign in from Cursor Settings → Tools & MCPs." };
+        : {
+            label: "Added to this window",
+            detail:
+              'Sign in from Cursor Settings → Tools & MCPs. The Agents Window runs no extensions: run "Mnemoverse: Add to Cursor (all windows)" to use memory there too.',
+          };
     case "guidance":
       if (found) {
         return {

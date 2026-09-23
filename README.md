@@ -3,6 +3,7 @@
 > Your coding agent remembers decisions, preferences and lessons across chats and projects, and learns which memories helped. Works in VS Code with GitHub Copilot agent mode and in Cursor.
 
 [![Install in VS Code](https://img.shields.io/badge/VS_Code-Install-0098FF?logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect?url=vscode%3Aextension%2FMnemoverse.mnemoverse-vscode)
+[![Add to Cursor](https://img.shields.io/badge/Cursor-Add_to_Cursor-000000?logo=cursor&logoColor=white)](https://cursor.com/install-mcp?name=mnemoverse&config=eyJ1cmwiOiJodHRwczovL21jcC5tbmVtb3ZlcnNlLmNvbS9tY3AifQ==)
 [![VS Code Marketplace](https://vsmarketplacebadges.dev/version-short/Mnemoverse.mnemoverse-vscode.svg)](https://marketplace.visualstudio.com/items?itemName=Mnemoverse.mnemoverse-vscode)
 [![Open VSX](https://img.shields.io/open-vsx/v/mnemoverse/mnemoverse-vscode?label=Open%20VSX&color=c160ef)](https://open-vsx.org/extension/mnemoverse/mnemoverse-vscode)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -28,9 +29,12 @@ No Node.js on this machine? Run **Mnemoverse: Use Hosted Connection (no Node.js)
 
 ### Cursor
 
-1. Open the Extensions view, search for **Mnemoverse** and install it (Cursor installs from [Open VSX](https://open-vsx.org/extension/mnemoverse/mnemoverse-vscode)).
-2. The extension adds Mnemoverse to Cursor's MCP servers as `extension-mnemoverse`. Click **Open MCP settings** on the notice (or open **Cursor Settings → Tools & MCPs**) and click **Connect** next to it.
-3. Approve in the browser, then ask the agent to remember something.
+Cursor's **Agents Window** runs no extensions, so Mnemoverse has to be in your Cursor MCP settings to work there. Either way below ends with the same entry, `mnemoverse`, which every Cursor window can use:
+
+- **[Add to Cursor](https://cursor.com/install-mcp?name=mnemoverse&config=eyJ1cmwiOiJodHRwczovL21jcC5tbmVtb3ZlcnNlLmNvbS9tY3AifQ==)**: Cursor opens its MCP settings and asks you to confirm. No extension needed.
+- **Or install this extension** (Extensions view, search for **Mnemoverse**; Cursor installs from [Open VSX](https://open-vsx.org/extension/mnemoverse/mnemoverse-vscode)). It adds Mnemoverse to the current editor window right away and offers **Add to Cursor (all windows)** for the rest.
+
+Then click **Connect** next to `mnemoverse` in **Cursor Settings → Tools & MCPs**, approve in the browser, and ask the agent to remember something.
 
 ### Kiro, Windsurf / Devin Desktop, Trae
 
@@ -56,10 +60,10 @@ What the extension can do depends on the editor it is installed in:
 | ------ | ----------------------- |
 | **VS Code 1.102+**, Insiders | Registers Mnemoverse as an MCP server through VS Code's MCP API. The agent in chat (Agent mode) gets the memory tools. |
 | **VSCodium, Positron, Eclipse Theia** | The same, through the same API. The tools appear only where the editor's agent uses MCP servers from extensions (for example VSCodium with a separately installed agent, or Positron with Copilot tools). Browser Sign In is not yet accepted from Positron, Theia, VSCodium Insiders or other forks the console doesn't know; there the extension offers **Set API Key** with a key from the [console](https://console.mnemoverse.com) instead. |
-| **Cursor** | Adds Mnemoverse's hosted server to Cursor's MCP servers, listed as `extension-mnemoverse`. You sign in from **Cursor Settings → Tools & MCPs** (click Connect next to it); Cursor runs the sign-in and holds it. If your `~/.cursor/mcp.json` or the project's `.cursor/mcp.json` already has Mnemoverse, the extension doesn't add a second copy. |
+| **Cursor** | In editor windows, adds Mnemoverse's hosted server as `extension-mnemoverse`. Cursor's Agents Window runs no extensions, so the extension offers **Add to Cursor (all windows)**: Cursor's own install puts `mnemoverse` in your Cursor MCP settings, and the extension then removes its in-window copy so tools aren't listed twice. You sign in from **Cursor Settings → Tools & MCPs** (click Connect); Cursor runs the sign-in and holds it. If your `~/.cursor/mcp.json` or the project's `.cursor/mcp.json` already has Mnemoverse, the extension adds nothing. |
 | **Kiro, Windsurf / Devin Desktop, Trae, Antigravity** | These editors don't let extensions add MCP servers yet. The extension says so and offers **Copy MCP config**: a snippet for the hosted server, with the name of the config file to paste it into. It doesn't write any config file. It reads the file (Kiro, Windsurf / Devin Desktop, Antigravity) to notice when Mnemoverse is already there. **Antigravity:** Mnemoverse doesn't accept Antigravity's sign-in yet, so memory can't be connected there for now; the [setup guide](https://mnemoverse.com/docs/api/editors) has the current status. |
 
-The status bar item (**Mnemoverse**) shows what happened in your editor: **Connected** (local server, signed in), **Sign in**, **Node.js needed**, **Added to _editor_** (the server is added and the editor runs its own sign-in: Cursor, or the hosted connection), **In your MCP config** (you added Mnemoverse to the editor's config yourself), or **Set up needed**. **Mnemoverse: Show Log** has the details.
+The status bar item (**Mnemoverse**) shows what happened in your editor: **Connected** (local server, signed in), **Sign in**, **Node.js needed**, **Added to _editor_** (hosted connection: the editor runs its own sign-in), **Added to this window** (a Cursor editor window; run **Add to Cursor** for the Agents Window), **In your MCP config** (you added Mnemoverse to the editor's config yourself), or **Set up needed**. **Mnemoverse: Show Log** has the details.
 
 ## Requirements
 
@@ -108,6 +112,7 @@ The extension connects the editor you install it in. Other tools connect to the 
 | `Mnemoverse: Set API Key (paste manually)` | Fallback: paste a key directly (VS Code-family editors; Cursor and config-file editors don't use a key, and the command says so). It replaces the stored key only when you enter a valid one; cancelling keeps the current key. |
 | `Mnemoverse: Clear API Key` | Remove the stored key. The local server won't start until you reconnect. |
 | `Mnemoverse: Copy MCP Config` | Copy a config snippet for the hosted server (`https://mcp.mnemoverse.com/mcp`) in your editor's format, and show which file it goes in. The snippet contains no key. |
+| `Mnemoverse: Add to Cursor (all windows)` | Cursor only: open Cursor's install for `mnemoverse` in your Cursor MCP settings (the server address only, no key), so the Agents Window can use memory too. |
 | `Mnemoverse: Open MCP Settings` | Open the place where your editor manages MCP servers (Cursor Settings → Tools & MCPs, or VS Code's **MCP: List Servers**). |
 | `Mnemoverse: Use Hosted Connection (no Node.js)` / `Use Local Connection (npx)` | Switch the `mnemoverse.connection` setting. |
 | `Mnemoverse: Get Started` | Open the walkthrough: connect, try it, share a room. |
@@ -138,7 +143,7 @@ With `mnemoverse.connection` set to `hosted`, the provider returns an HTTP serve
 
 - Your API key is stored only in `vscode.SecretStorage` (OS keychain: macOS Keychain, Windows Credential Vault, Linux libsecret). Never on disk, never in settings.json, never in git.
 - With the hosted connection, and in Cursor, the extension doesn't need or send a key: the editor holds the OAuth sign-in. A key stored earlier (for the local connection, or by version 0.2 in Cursor) stays in the keychain until you run **Sign Out** or **Clear API Key**; on the hosted connection the status bar menu offers **Remove stored key**.
-- The extension only reads MCP config files: Cursor's `mcp.json` files (to avoid adding Mnemoverse twice) and the Kiro, Windsurf and Antigravity config (to see whether you already added it). It counts only an entry for `https://mcp.mnemoverse.com` or the `@mnemoverse/mcp-memory-server` package run through npx (or pnpm, yarn, bun), and it skips files that are large, not regular files, or, inside a workspace, symlinks. It never writes any MCP config file; the connection commands change only the `mnemoverse.connection` setting.
+- The extension only reads MCP config files: Cursor's `mcp.json` files (to avoid adding Mnemoverse twice) and the Kiro, Windsurf and Antigravity config (to see whether you already added it). It counts only an entry for `https://mcp.mnemoverse.com` or the `@mnemoverse/mcp-memory-server` package run through npx (or pnpm, yarn, bun), and it skips files that are large, not regular files, or, inside a workspace, symlinks. It never writes any MCP config file itself: **Add to Cursor** hands the entry to Cursor's own install, which you confirm in Cursor, and the connection commands change only the `mnemoverse.connection` setting.
 - The extension contains zero telemetry of its own.
 - Memory content is sent to `core.mnemoverse.com` over HTTPS. The [Mnemoverse privacy policy](https://mnemoverse.com/privacy) says what is stored and for how long.
 - Capabilities declared in `package.json`: `untrustedWorkspaces: false` (the local connection spawns `npx`, which runs third-party code), `virtualWorkspaces: false` (the extension needs a local extension host).

@@ -148,7 +148,13 @@ export const __state = {
   respond: (() => undefined) as Responder,
   inputBox: (() => undefined) as (opts: any) => string | undefined | Promise<string | undefined>,
   quickPick: ((items: any[]) => undefined) as (items: any[], opts: any) => any,
+  windowStateListeners: new Set<(e: { focused: boolean }) => void>(),
 };
+
+/** Simulate the editor window gaining or losing focus. */
+export function __fireWindowState(focused: boolean): void {
+  for (const l of [...__state.windowStateListeners]) l({ focused });
+}
 
 /** Decide what each toast "returns" (which button the user clicked). */
 export function __setResponder(fn: Responder): void {
@@ -166,6 +172,10 @@ function show(level: ShownMessage["level"], message: string, rest: any[]): Promi
 }
 
 export const window = {
+  onDidChangeWindowState(listener: (e: { focused: boolean }) => void): Disposable {
+    __state.windowStateListeners.add(listener);
+    return new Disposable(() => __state.windowStateListeners.delete(listener));
+  },
   createOutputChannel(_name: string, _opts?: unknown) {
     const push = (lvl: string) => (msg: string) => __state.logLines.push(`[${lvl}] ${msg}`);
     return {

@@ -9,6 +9,7 @@ import { canBrowserSignIn, detectHostKind, identifyHost, type HostProbe } from "
 import { initLog, log } from "./log";
 import {
   appName,
+  getConfiguredEntry,
   getConnectionMode,
   getHost,
   hasKey,
@@ -21,9 +22,12 @@ import {
   type HostInfo,
 } from "./state";
 import {
+  addToCursorSettings,
+  cursorPollingDisposable,
   explainCursorSignIn,
   explainCursorSignOut,
   explainKeyNotUsedInCursor,
+  recheckCursorSettings,
   showCursorIntro,
   startCursorAdapter,
 } from "./cursor";
@@ -183,6 +187,20 @@ async function startHostAdapter(
       case "cursor": {
         const result = await startCursorAdapter();
         setRegistered(result.registered, result.configuredIn);
+        context.subscriptions.push(cursorPollingDisposable);
+        if (!result.configuredIn && typeof vscode.window.onDidChangeWindowState === "function") {
+          // The user may add Mnemoverse to Cursor's settings some other way
+          // (the docs' Add to Cursor button, cursor.directory) while this
+          // window is open: re-check when the window regains focus, so our
+          // in-window copy is withdrawn and the tools aren't listed twice.
+          context.subscriptions.push(
+            vscode.window.onDidChangeWindowState((e) => {
+              if (e.focused && !getConfiguredEntry()) {
+                void recheckCursorSettings();
+              }
+            }),
+          );
+        }
         break;
       }
       case "guidance": {
@@ -350,6 +368,16 @@ function registerCommands(context: vscode.ExtensionContext, onKeyChanged: () => 
     "mnemoverse.openDocs": () => vscode.env.openExternal(vscode.Uri.parse(DOCS_URL)),
     "mnemoverse.copyMcpConfig": () => copyMcpConfig(),
     "mnemoverse.openMcpSettings": () => openMcpSettings(),
+    "mnemoverse.addToCursor": async () => {
+      if (getHost().kind === "cursor") {
+        return addToCursorSettings();
+      }
+      // Declared for Cursor only (hidden from the palette elsewhere), but
+      // commands can still be run by id: point to what applies here.
+      await vscode.window.showInformationMessage(
+        `"Add to Cursor" applies in Cursor. In ${appName()}, use "Mnemoverse: Get Started".`,
+      );
+    },
     "mnemoverse.showMenu": () => showMenu(),
     "mnemoverse.getStarted": () => openGetStarted(),
     "mnemoverse.tryIt": () => tryIt(),

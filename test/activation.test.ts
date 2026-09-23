@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
-import { fakeNodeBin, flush, load, manifest, manifestCommands, tempDir } from "./helpers";
+import { fakeNodeBin, flush, load, manifest, manifestCommands, tempDir, waitFor } from "./helpers";
 
 const posixOnly = process.platform === "win32" ? it.skip : it;
 
@@ -236,9 +236,10 @@ describe("Cursor adapter", () => {
     expect(vscode.__state.context.get("mnemoverse.host")).toBe("cursor");
     expect(vscode.__state.context.get("mnemoverse.connected")).toBe(true);
 
-    const intro = vscode.__state.messages.find((m) => m.message.includes("added to Cursor's MCP servers"));
-    expect(intro?.message).toContain("Tools & MCPs");
-    expect(intro?.items).toEqual(["Open MCP settings"]);
+    const intro = vscode.__state.messages.find((m) => m.message.includes("added to this Cursor window"));
+    // The Agents Window runs no extensions: the intro says so and leads with the fix.
+    expect(intro?.message).toContain("Agents Window");
+    expect(intro?.items).toEqual(["Add to Cursor (all windows)", "Open MCP settings"]);
 
     // Disposal must not unregister: in Cursor that also clears the OAuth sign-in.
     for (const d of ctx.subscriptions) d.dispose();
@@ -263,7 +264,7 @@ describe("Cursor adapter", () => {
     expect(register).not.toHaveBeenCalled();
     expect(vscode.__state.context.get("mnemoverse.connected")).toBe(true);
     expect(vscode.__state.logLines.some((l) => l.includes("already configured"))).toBe(true);
-    expect(vscode.__state.messages.some((m) => m.message.includes("added to Cursor's MCP servers"))).toBe(false);
+    expect(vscode.__state.messages.some((m) => m.message.includes("added to this Cursor window"))).toBe(false);
     // Not "Connected": the extension registered nothing and can't see Cursor's
     // sign-in. The tooltip names the entry it trusted and where.
     const tooltip = String(vscode.__state.statusItems[0].tooltip);
@@ -296,7 +297,7 @@ describe("Cursor adapter", () => {
     vscode.__setHost({ appName: "Cursor", uriScheme: "cursor", lm: "stub", cursor: cursorApi(register) });
     await ext.activate(vscode.__makeContext() as never);
     expect(register).toHaveBeenCalledTimes(1);
-    expect(String(vscode.__state.statusItems[0].tooltip)).toContain("Added to Cursor");
+    expect(String(vscode.__state.statusItems[0].tooltip)).toContain("Added to this window");
   });
 
   posixOnly("a workspace .cursor/mcp.json that is a FIFO or a symlink to /dev/zero doesn't stall activation", async () => {
@@ -367,7 +368,7 @@ describe("Cursor adapter", () => {
 
     expect(vscode.__state.opened).toEqual([]); // no browser sign-in to the console
     expect(vscode.__state.messages[0].message).toContain("signs in through Cursor itself");
-    expect(vscode.__state.messages[0].items).toEqual(["Open MCP settings"]);
+    expect(vscode.__state.messages[0].items).toEqual(["Add to Cursor (all windows)", "Open MCP settings"]);
   });
 
   it("Open MCP settings uses the first Cursor settings command that exists", async () => {
@@ -554,6 +555,147 @@ describe("guidance hosts: Copy MCP config", () => {
   });
 });
 
+describe("Add to Cursor (the Agents Window runs no extensions)", () => {
+  function writeCursorSettingsEntry() {
+    fs.mkdirSync(path.join(home, ".cursor"), { recursive: true });
+    fs.writeFileSync(
+      path.join(home, ".cursor", "mcp.json"),
+      JSON.stringify({ mcpServers: { mnemoverse: { url: HOSTED, headers: {} } } }),
+    );
+  }
+
+  it("builds Cursor's documented install deeplink with the hosted URL only", async () => {
+    await load();
+    const cursor = await import("../src/cursor");
+    const link = new URL(cursor.cursorInstallDeeplink());
+    expect(link.protocol).toBe("cursor:");
+    expect(link.host).toBe("anysphere.cursor-deeplink");
+    expect(link.pathname).toBe("/mcp/install");
+    expect(link.searchParams.get("name")).toBe("mnemoverse");
+    const raw = link.searchParams.get("config")!;
+    // Raw base64 is read with URLSearchParams by Cursor: a "+" would become a space.
+    expect(raw).toMatch(/^[A-Za-z0-9=]+$/);
+    expect(JSON.parse(Buffer.from(raw, "base64").toString("utf8"))).toEqual({ url: HOSTED });
+  });
+
+  it("opens the deeplink, then adopts the new settings entry and withdraws the in-window copy", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const { vscode, ext } = await load();
+      const cursor = await import("../src/cursor");
+      const register = vi.fn();
+      const unregister = vi.fn();
+      vscode.__setHost({ appName: "Cursor", uriScheme: "cursor", lm: "stub", cursor: cursorApi(register, unregister) });
+      const ctx = vscode.__makeContext();
+      await ext.activate(ctx as never);
+      await flush();
+      expect(register).toHaveBeenCalledTimes(1);
+
+      vscode.__state.messages.length = 0;
+      await vscode.commands.executeCommand("mnemoverse.addToCursor");
+      expect(vscode.__state.opened).toContain(cursor.cursorInstallDeeplink());
+
+      // Nothing yet: the user is still looking at Cursor's confirm dialog.
+      await vi.advanceTimersByTimeAsync(cursor.ADOPT_POLL_MS + 10);
+      await new Promise((r) => setTimeout(r, 50)); // let that tick's file read finish
+      expect(unregister).not.toHaveBeenCalled();
+
+      writeCursorSettingsEntry();
+      await vi.advanceTimersByTimeAsync(cursor.ADOPT_POLL_MS + 10);
+      // The poll's re-check reads the file with real I/O; wait for it to land.
+      await waitFor(() => unregister.mock.calls.length > 0);
+      await waitFor(() => vscode.__state.messages.some((m) => m.message.includes("now in your Cursor MCP settings")));
+      expect(unregister).toHaveBeenCalledWith("mnemoverse");
+      expect(unregister).toHaveBeenCalledTimes(1);
+      expect(String(vscode.__state.statusItems[0].tooltip)).toContain("In your MCP config");
+      expect(vscode.__state.messages.some((m) => m.message.includes("now in your Cursor MCP settings"))).toBe(true);
+
+      // Polling stopped: more ticks change nothing.
+      await vi.advanceTimersByTimeAsync(cursor.ADOPT_POLL_MS * 3);
+      await new Promise((r) => setTimeout(r, 50));
+      expect(unregister).toHaveBeenCalledTimes(1);
+      for (const d of ctx.subscriptions) d.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives up waiting after the limit and never unregisters", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    try {
+      const { vscode, ext } = await load();
+      const cursor = await import("../src/cursor");
+      const unregister = vi.fn();
+      vscode.__setHost({ appName: "Cursor", uriScheme: "cursor", lm: "stub", cursor: cursorApi(vi.fn(), unregister) });
+      await ext.activate(vscode.__makeContext() as never);
+      await flush();
+      await vscode.commands.executeCommand("mnemoverse.addToCursor");
+      await vi.advanceTimersByTimeAsync(cursor.ADOPT_POLL_LIMIT_MS + cursor.ADOPT_POLL_MS * 2);
+      await flush();
+      expect(vscode.__state.logLines.some((l) => l.includes("stopped waiting"))).toBe(true);
+      writeCursorSettingsEntry(); // too late for the poll; picked up on focus or reload
+      await vi.advanceTimersByTimeAsync(cursor.ADOPT_POLL_MS * 3);
+      await flush();
+      expect(unregister).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("when the settings already have Mnemoverse, says so instead of opening the deeplink", async () => {
+    writeCursorSettingsEntry();
+    const { vscode, ext } = await load();
+    vscode.__setHost({ appName: "Cursor", uriScheme: "cursor", lm: "stub", cursor: cursorApi() });
+    await ext.activate(vscode.__makeContext() as never);
+    await flush();
+    vscode.__state.messages.length = 0;
+    await vscode.commands.executeCommand("mnemoverse.addToCursor");
+    expect(vscode.__state.opened).toEqual([]);
+    expect(vscode.__state.messages[0].message).toContain("already in your Cursor MCP settings");
+  });
+
+  it("re-checks on window focus, so an entry added elsewhere withdraws the in-window copy", async () => {
+    const { vscode, ext } = await load();
+    const unregister = vi.fn();
+    vscode.__setHost({ appName: "Cursor", uriScheme: "cursor", lm: "stub", cursor: cursorApi(vi.fn(), unregister) });
+    await ext.activate(vscode.__makeContext() as never);
+    await flush();
+    vscode.__fireWindowState(true);
+    await flush();
+    expect(unregister).not.toHaveBeenCalled();
+
+    writeCursorSettingsEntry();
+    vscode.__fireWindowState(true);
+    await waitFor(() => unregister.mock.calls.length > 0); // the re-check reads the file (real I/O)
+    expect(unregister).toHaveBeenCalledWith("mnemoverse");
+    expect(String(vscode.__state.statusItems[0].tooltip)).toContain("In your MCP config");
+  });
+
+  it("offers Add to Cursor in the status bar menu until the settings have Mnemoverse", async () => {
+    const { vscode, ext } = await load();
+    vscode.__setHost({ appName: "Cursor", uriScheme: "cursor", lm: "stub", cursor: cursorApi() });
+    let labels: string[] = [];
+    vscode.__state.quickPick = (items: any[]) => {
+      labels = items.map((i) => String(i.label));
+      return undefined;
+    };
+    await ext.activate(vscode.__makeContext() as never);
+    await flush();
+    await vscode.commands.executeCommand("mnemoverse.showMenu");
+    expect(labels.some((l) => l.includes("Add to Cursor (all windows)"))).toBe(true);
+  });
+
+  it("outside Cursor the command explains it applies in Cursor only", async () => {
+    const { vscode, ext } = await load();
+    await ext.activate(vscode.__makeContext() as never);
+    await flush();
+    vscode.__state.messages.length = 0;
+    await vscode.commands.executeCommand("mnemoverse.addToCursor");
+    expect(vscode.__state.opened).toEqual([]);
+    expect(vscode.__state.messages[0].message).toContain("applies in Cursor");
+  });
+});
+
 describe("status bar", () => {
   it("shows '$(database) Mnemoverse', opens the menu, and describes the state", async () => {
     const { vscode, ext } = await load();
@@ -567,11 +709,11 @@ describe("status bar", () => {
     expect(String(item.tooltip)).toContain("Sign in");
   });
 
-  it("says 'Added to Cursor' in Cursor and 'Set up needed' on guidance hosts", async () => {
+  it("says 'Added to this window' in Cursor and 'Set up needed' on guidance hosts", async () => {
     let { vscode, ext } = await load();
     vscode.__setHost({ appName: "Cursor", uriScheme: "cursor", lm: "stub", cursor: cursorApi() });
     await ext.activate(vscode.__makeContext() as never);
-    expect(String(vscode.__state.statusItems[0].tooltip)).toContain("Added to Cursor");
+    expect(String(vscode.__state.statusItems[0].tooltip)).toContain("Added to this window");
 
     ({ vscode, ext } = await load());
     vscode.__setHost({ appName: "Kiro", uriScheme: "kiro" });
