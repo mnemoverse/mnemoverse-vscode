@@ -4,6 +4,96 @@ All notable changes to the Mnemoverse Memory extension for VS Code.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] — Unreleased
+
+Support for the editors that install the extension from Open VSX, not only
+VS Code: Cursor gets a registered server, editors without an extension API get a
+config snippet, and the extension says "connected" only when it registered
+something.
+
+### Added
+
+- **Cursor support.** Cursor ignores VS Code's MCP provider API (its
+  `registerMcpServerDefinitionProvider` is a stub that does nothing), so in
+  Cursor the extension registers Mnemoverse's hosted server,
+  `https://mcp.mnemoverse.com/mcp`, through Cursor's own
+  `vscode.cursor.mcp.registerServer`. It appears as `extension-mnemoverse` in
+  Cursor Settings → Tools & MCPs, where Cursor runs the sign-in. No headers and
+  no key are passed. If `~/.cursor/mcp.json` or a workspace `.cursor/mcp.json`
+  already has a Mnemoverse entry (hosted URL or the npm package), the extension
+  adds nothing, so tools are not listed twice. Those files are only read.
+- **Setup guidance for editors without a usable extension API** — Kiro,
+  Windsurf / Devin Desktop, Trae, Antigravity, and any editor without
+  `vscode.lm`: one first-run notice saying so, with **Copy config** and
+  **Open guide**. New command `Mnemoverse: Copy MCP Config` copies a snippet for
+  the hosted server in the editor's format (`url` or `serverUrl`, `mcpServers` or
+  VS Code's `servers`) and names the file to paste it into. No config file is
+  written.
+- **Hosted connection** for VS Code-family editors: setting
+  `mnemoverse.connection` (`local` by default, or `hosted`). `hosted` registers an
+  HTTP server for `https://mcp.mnemoverse.com/mcp`; VS Code runs the MCP OAuth
+  sign-in itself, nothing is spawned, and no Node.js or stored key is needed.
+  Commands `Use Hosted Connection (no Node.js)` / `Use Local Connection (npx)`.
+  Changing the setting swaps the server without a reload.
+- **Node.js check** for the local connection: after a successful sign-in and
+  before each server start, the extension looks for `npx` on PATH (with PATHEXT
+  on Windows). If it is missing, the server start fails with "Mnemoverse's local
+  server needs Node.js 18+ (npx was not found on PATH)" and one notice per
+  session offers **Use hosted connection** or **Install Node.js**.
+- **Status bar item** "Mnemoverse" with the current state (Connected / Sign in /
+  Added to Cursor / Set up needed) and a menu of the actions that apply to the
+  editor. Setting `mnemoverse.showStatusBar` hides it.
+- **"Mnemoverse" output channel** (`Mnemoverse: Show Log`): host detection, the
+  adapter chosen, what was registered, and errors. Keys and sign-in codes are
+  never logged.
+- **Walkthrough** "Get started with Mnemoverse Memory" (`Mnemoverse: Get
+  Started`): connect (a different step for VS Code, Cursor and config-file
+  editors), try it (`Mnemoverse: Try It in Chat` opens agent chat with a first
+  prompt filled in), share a room.
+- **Chat skill** `mnemoverse-memory` (VS Code 1.109+, offered once memory is
+  connected): when to recall, what to save and never save, rating recalls with
+  `memory_feedback`, rooms by address, and when to prefer Mnemoverse over the
+  editor's local `/memories` notes. Older editors ignore it.
+- **Rating prompt**: at most twice ever, only for a connected user after 7 days
+  and 4 active days, never in a session that showed a setup notice. It links the
+  review page of the store the editor uses (VS Code Marketplace or Open VSX).
+  Commands `Rate Mnemoverse` and `Star on GitHub`.
+- Commands `Open MCP Settings` and `Show Menu`.
+
+### Changed
+
+- **Host-aware text.** Notices name the editor (`vscode.env.appName`) instead of
+  "VS Code" or "Copilot Chat", and the key minted by Sign In is named after the
+  editor (for example "Cursor — host — date") in the console.
+- **"Connected" means connected.** The extension says so only when it actually
+  registered a server the editor will use. In Cursor, Sign In / Complete sign-in
+  now explain Cursor's own sign-in instead of minting a key Cursor would never
+  use; Set API Key explains first that Cursor doesn't use the key. On config-file
+  editors, Sign In shows the Copy config guidance.
+- **Sign-in wait is 30 minutes** (was 10). The portal's code lifetime starts when
+  the code is created, after the user approves, so new users who sign up first
+  could run out the old timer. The timeout notice now has **Try again** and
+  **Paste key**.
+- **Sign Out** says the key stays valid until it is revoked in the console, with
+  an **Open console** button.
+- The local server now starts with `MNEMOVERSE_CLIENT=vscode-extension`, so it can
+  word its errors for extension users.
+
+### Fixed
+
+- Activation no longer fails as a whole when the editor has no `vscode.lm` or
+  the provider registration throws: the URI handler and every command register
+  first, and the MCP setup falls back to guidance. Before, every command failed
+  with "command not found" in such editors.
+- Eclipse Theia: the server started without a key, because Theia calls resolve
+  without a cancellation token and with a plain object. Resolve now accepts both.
+- `Set API Key` cleared the stored key before prompting, so pressing Escape
+  signed the user out silently. It now prompts first and replaces the key only
+  on a valid entry.
+- A sign-in approved in the browser after the wait expired was dropped without a
+  word. It now shows "This sign-in finished after the request expired — run
+  Sign In again" with a **Sign In** button.
+
 ## [0.2.1] — 2026-09-23
 
 Listing text only: the extension, its commands and its sign-in are unchanged.
