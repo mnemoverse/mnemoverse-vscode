@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import * as os from "node:os";
 import {
+  isWellFormedState,
   generateState,
   generatePkce,
   buildRedirectUri,
@@ -12,6 +13,9 @@ import {
 } from "./signin-core";
 import { storeApiKey, clearApiKey } from "./auth";
 import { resetConnectPrompt } from "./session";
+import { appName, isRegistered } from "./state";
+import { isNpxAvailable, promptNodeMissing } from "./node-check";
+import { log } from "./log";
 
 /**
  * Keyless browser sign-in (Route A). The user clicks "Sign In"; we open the
@@ -40,8 +44,36 @@ interface Pending {
 // match is the CSRF gate for the callback.
 let pending: Pending | undefined;
 
-const TIMEOUT_MS = 10 * 60 * 1000; // matches the code TTL
+/**
+ * How long the editor waits for the browser to come back. 30 minutes, not the
+ * 10-minute code TTL: the portal starts the TTL when the code is CREATED (after
+ * the user approves), while this timer starts when Sign In is clicked. A new
+ * user who creates an account and verifies email first can take well over 10
+ * minutes before the code even exists; with a 10-minute timer their valid
+ * callback arrived after the extension had given up and was silently dropped.
+ * The server-side TTL and PKCE remain the security boundary; this is only how
+ * long the progress notification stays up.
+ */
+export const TIMEOUT_MS = 30 * 60 * 1000;
 
+/** The console, where keys are listed and revoked. */
+const CONSOLE_URL = "https://console.mnemoverse.com";
+
+/** True while the "sign-in expired" notice is on screen, so repeated URIs can't stack toasts. */
+let lateNoticeOpen = false;
+
+/**
+ * States of attempts that already signed in this session. A browser or OS that
+ * delivers the same callback URI twice must not follow a success with a
+ * "sign-in expired" notice.
+ */
+const completedStates = new Set<string>();
+
+/**
+ * Name for the key the console mints, shown in the console's key list. Uses
+ * the editor's own name ("Cursor — host — date", "VSCodium — …") rather than a
+ * hard-coded "VS Code", so a user with several editors can tell keys apart.
+ */
 function defaultKeyName(): string {
   const host = (() => {
     try {
@@ -51,7 +83,7 @@ function defaultKeyName(): string {
     }
   })();
   const date = new Date().toISOString().slice(0, 10);
-  return `VS Code — ${host} — ${date}`;
+  return `${appName()} — ${host} — ${date}`;
 }
 
 export async function signIn(
@@ -127,9 +159,24 @@ export async function signIn(
  */
 export async function handleUri(uri: vscode.Uri): Promise<void> {
   const result = parseCallback(uri.query);
+  if (
+    !pending &&
+    result.kind === "code" &&
+    isWellFormedState(result.state) &&
+    !completedStates.has(result.state)
+  ) {
+    // A well-formed callback with nothing waiting for it: almost always the
+    // user approving in the browser after this editor's wait expired (or after
+    // a restart, which drops the in-memory PKCE verifier). The code cannot be
+    // redeemed without that verifier, so say so and offer a fresh start
+    // instead of dropping it silently. Nothing from the URI is used or logged.
+    log.warn("A sign-in callback arrived with no sign-in in progress (expired or from an earlier session)");
+    void showLateCallbackNotice();
+    return;
+  }
   if (!pending || result.kind === "invalid" || result.state !== pending.state) {
     // Unsolicited or stale callback — any site can fire vscode:// URIs.
-    console.warn("[mnemoverse] ignoring an unsolicited or mismatched sign-in callback");
+    log.warn("Ignoring an unsolicited or mismatched sign-in callback");
     return;
   }
   const p = pending;
@@ -154,6 +201,7 @@ async function redeemCode(p: Pending, code: string): Promise<void> {
     // replaced) — do NOT store a key for an attempt the user abandoned.
     if (pending !== p) return;
     await storeApiKey(p.context, data.api_key);
+    completedStates.add(p.state);
     p.fireServerChanged(); // make VS Code re-resolve + respawn the MCP server with the new key
     p.settle({ ok: true, email: data.email });
   } catch (err) {
@@ -193,6 +241,36 @@ export async function completeSignIn(): Promise<void> {
   await redeemCode(p, entered.trim());
 }
 
+/**
+ * "This sign-in finished after the request expired" — at most one on screen at
+ * a time, so a page (or a hostile site) firing the URI repeatedly cannot stack
+ * notifications.
+ */
+async function showLateCallbackNotice(): Promise<void> {
+  if (lateNoticeOpen) {
+    return;
+  }
+  lateNoticeOpen = true;
+  try {
+    const choice = await vscode.window.showWarningMessage(
+      "This sign-in finished after the request expired — run Sign In again.",
+      "Sign In",
+    );
+    if (choice === "Sign In") {
+      await vscode.commands.executeCommand("mnemoverse.signIn");
+    }
+  } finally {
+    lateNoticeOpen = false;
+  }
+}
+
+/**
+ * Sign out on this device: forget the stored key and stop the server using it.
+ *
+ * The key itself stays valid on the server — there is no self-revoke endpoint
+ * yet — so the message says so and links the console where it can be revoked.
+ * Saying only "Signed out" would suggest the key is gone.
+ */
 export async function signOut(
   context: vscode.ExtensionContext,
   fireServerChanged: () => void,
@@ -203,7 +281,13 @@ export async function signOut(
   // session guard would otherwise suppress the actionable toast.
   resetConnectPrompt();
   fireServerChanged();
-  await vscode.window.showInformationMessage("Signed out of Mnemoverse.");
+  const choice = await vscode.window.showInformationMessage(
+    "Signed out of Mnemoverse on this device. The key stays valid until you revoke it in the console.",
+    "Open console",
+  );
+  if (choice === "Open console") {
+    await vscode.env.openExternal(vscode.Uri.parse(CONSOLE_URL));
+  }
 }
 
 async function exchange(code: string, verifier: string): Promise<ExchangeResponse> {
@@ -228,8 +312,17 @@ async function exchange(code: string, verifier: string): Promise<ExchangeRespons
 
 function reportOutcome(o: Outcome): void {
   if (o.ok) {
+    const who = `Signed in to Mnemoverse${o.email ? ` as ${o.email}` : ""}`;
+    // "Connected" only when something will actually use the key: the lm
+    // provider is registered AND the local server can start. Otherwise report
+    // the sign-in alone and, if Node is the gap, say how to close it.
+    if (!isNpxAvailable()) {
+      void vscode.window.showInformationMessage(`${who}.`);
+      void promptNodeMissing();
+      return;
+    }
     void vscode.window.showInformationMessage(
-      `Signed in to Mnemoverse${o.email ? ` as ${o.email}` : ""} — memory connected.`,
+      isRegistered() ? `${who} — memory connected in ${appName()}.` : `${who}.`,
     );
     return;
   }
@@ -241,9 +334,7 @@ function reportOutcome(o: Outcome): void {
       void vscode.window.showInformationMessage("Mnemoverse sign-in was cancelled in the browser.");
       return;
     case "timeout":
-      void vscode.window.showWarningMessage(
-        'Mnemoverse sign-in timed out. Run "Mnemoverse: Sign In" to try again, or paste a key with "Mnemoverse: Set API Key (paste manually)".',
-      );
+      void showTimeoutNotice();
       return;
     case "exchange":
       void vscode.window.showErrorMessage(
@@ -251,7 +342,23 @@ function reportOutcome(o: Outcome): void {
           ? "Sign-in link expired or already used. Run “Mnemoverse: Sign In” again."
           : "Could not complete Mnemoverse sign-in. Please try again.",
       );
-      console.error("[mnemoverse] sign-in exchange failed:", o.detail);
+      // `detail` is an error code from the exchange (e.g. invalid_grant,
+      // http_502) or a local message — never the code or the key.
+      log.error("Sign-in exchange failed", o.detail);
       return;
+  }
+}
+
+/** Timeout: offer the two ways forward the portal contract promises (Retry / Paste key). */
+async function showTimeoutNotice(): Promise<void> {
+  const choice = await vscode.window.showWarningMessage(
+    "Mnemoverse sign-in timed out before the browser came back.",
+    "Try again",
+    "Paste key",
+  );
+  if (choice === "Try again") {
+    await vscode.commands.executeCommand("mnemoverse.signIn");
+  } else if (choice === "Paste key") {
+    await vscode.commands.executeCommand("mnemoverse.setApiKey");
   }
 }

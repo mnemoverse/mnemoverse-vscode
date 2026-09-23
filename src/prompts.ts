@@ -19,13 +19,16 @@ import { claimConnectPrompt } from "./session";
  * already wrapped to surface its own errors, so a sign-in failure here is not
  * silent. Fire-and-forget by design: callers do not await the user's choice.
  */
-export async function promptConnect(
-  detail = "Connect Mnemoverse to use memory in Copilot Chat.",
-): Promise<void> {
+export async function promptConnect(detail?: string): Promise<void> {
   if (!claimConnectPrompt()) {
     return;
   }
-  const choice = await vscode.window.showInformationMessage(detail, "Sign In", "Later");
+  // Host-aware default: the agent that uses these tools is the editor's own
+  // chat, which is not always Copilot Chat (Positron, Theia AI, VSCodium with a
+  // sideloaded agent), so the text names the editor instead.
+  const text =
+    detail ?? `Connect Mnemoverse to use memory with the agent in ${vscode.env.appName || "your editor"}.`;
+  const choice = await vscode.window.showInformationMessage(text, "Sign In", "Later");
   if (choice === "Sign In") {
     await vscode.commands.executeCommand("mnemoverse.signIn");
   }

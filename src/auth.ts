@@ -12,24 +12,18 @@ import { normalizeApiKey } from "./signin-core";
 const SECRET_KEY = "mnemoverse.apiKey";
 
 /**
- * Return the user's Mnemoverse API key. If none is stored, prompt the user
- * for one and store it. If the user cancels the prompt, return `undefined`
- * so the caller can decide how to handle the missing credential (for the
- * MCP provider, that means throwing so Copilot shows a visible error).
+ * Ask the user to paste a Mnemoverse API key. Prompt ONLY: nothing is read from
+ * or written to SecretStorage here. Returns the normalized key, or `undefined`
+ * if the user dismissed the box.
  *
- * This function is the ONE entry point for "give me the current API key":
- * both the MCP provider's `resolveMcpServerDefinition` and the
- * `mnemoverse.setApiKey` command call it. Keeping the logic in one place
- * means a future OAuth migration only needs to touch this file.
+ * WHY PROMPT-ONLY (0.3.0). The old `getApiKey` read-or-prompt-and-store helper
+ * pushed `mnemoverse.setApiKey` into clearing the stored key first so the
+ * prompt would appear — and pressing Escape then left the user signed out with
+ * no message, while the running server kept the old key until its next
+ * restart. The command now prompts first and stores only a valid entry
+ * (`storeApiKey` overwrites), so cancelling leaves the existing key untouched.
  */
-export async function getApiKey(
-  context: vscode.ExtensionContext,
-): Promise<string | undefined> {
-  const existing = await context.secrets.get(SECRET_KEY);
-  if (existing) {
-    return existing;
-  }
-
+export async function promptForApiKey(): Promise<string | undefined> {
   const entered = await vscode.window.showInputBox({
     title: "Mnemoverse API key",
     prompt:
@@ -53,26 +47,24 @@ export async function getApiKey(
     return undefined;
   }
 
-  // Persist through the same guard the keyless flow uses, so the paste path
-  // can't store a bare/empty/wrong-prefix key either (validateInput already
-  // blocks it in the UI; this is the single, authoritative store gate).
-  const key = normalizeApiKey(entered);
-  await context.secrets.store(SECRET_KEY, key);
-  return key;
+  // The same guard the keyless flow and storeApiKey use, so a bare, empty or
+  // wrong-prefix key can never be returned (validateInput already blocks it in
+  // the UI; this is the authoritative check).
+  return normalizeApiKey(entered);
 }
 
 /**
- * Store an API key obtained WITHOUT a prompt — used by the keyless browser
- * sign-in flow after it exchanges the one-time code for the real key. Writes to
- * the SAME SecretStorage slot getApiKey reads, so the MCP provider picks it up
- * with zero changes to its injection path.
+ * Store an API key, overwriting any existing one. Used by the keyless browser
+ * sign-in after it exchanges the one-time code for the real key, and by
+ * `mnemoverse.setApiKey` after a valid paste. Writes the single SecretStorage
+ * slot the MCP provider reads, so the next resolve injects the new key.
  */
 export async function storeApiKey(
   context: vscode.ExtensionContext,
   key: string,
 ): Promise<void> {
-  // Reject a malformed key (same check getApiKey applies to pasted keys) so a
-  // bad value from any source can't silently break later auth.
+  // Reject a malformed key (same check promptForApiKey applies to pasted keys)
+  // so a bad value from any source can't silently break later auth.
   await context.secrets.store(SECRET_KEY, normalizeApiKey(key));
 }
 
@@ -89,9 +81,8 @@ export async function peekApiKey(
 }
 
 /**
- * Delete the stored API key. Called by the `mnemoverse.clearApiKey` command
- * and indirectly by `mnemoverse.setApiKey` (to force a re-prompt when the
- * user wants to rotate their key without reinstalling the extension).
+ * Delete the stored API key. Called only by `mnemoverse.clearApiKey` and Sign
+ * Out — never as a side effect of prompting (see promptForApiKey).
  */
 export async function clearApiKey(
   context: vscode.ExtensionContext,

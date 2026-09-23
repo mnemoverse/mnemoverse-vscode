@@ -65,6 +65,16 @@ export function buildConnectUrl(opts: {
   return u.toString();
 }
 
+/**
+ * Whether a callback `state` has the exact shape generateState() produces
+ * (43 base64url characters). Used to tell a genuine late callback from our own
+ * flow apart from arbitrary junk: any website can fire a custom-scheme URI, so
+ * only a well-formed one earns a user-facing "sign-in expired" notice.
+ */
+export function isWellFormedState(state: string): boolean {
+  return /^[A-Za-z0-9_-]{43}$/.test(state ?? "");
+}
+
 export type CallbackResult =
   | { kind: "code"; code: string; state: string }
   | { kind: "error"; error: string; state: string }
@@ -93,7 +103,7 @@ export interface ExchangeResponse {
 export const KEY_PREFIX = "mk_live_";
 
 /**
- * Validate + trim a key before it is persisted. Mirrors getApiKey's paste-flow
+ * Validate + trim a key before it is persisted. Mirrors promptForApiKey's paste-flow
  * check so a malformed value (from any source — a buggy server, a corrupt body)
  * can never land in SecretStorage and cause silent auth failures later.
  */
