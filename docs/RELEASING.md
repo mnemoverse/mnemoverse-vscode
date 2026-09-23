@@ -117,10 +117,12 @@ VSIX…**).
 
 ## When something fails
 
-- **`build` failed.** Nothing was published. Fix it on main through a PR. Because
-  no store has the version yet, you may move the tag:
+- **`build` failed.** Nothing was published by this run. Fix it on main through
+  a PR. If this was the tag's first run, no store has the version yet, so you
+  may move the tag:
   `git tag -d v0.4.0 && git push origin :refs/tags/v0.4.0`, then tag the fixed
-  commit. Never move a tag once any store has the version; bump instead.
+  commit. Never move a tag once any store has the version (check both store
+  pages, and whether the tag has a GitHub release); bump instead.
 - **One store failed** (for example an expired token). Fix the cause (rotate the
   secret, finish the Entra setup), then open the run and click **Re-run failed
   jobs**. Only the failed store job and the `release` job run again; the store
