@@ -14,7 +14,7 @@ import {
 } from "./signin-core";
 import { storeApiKey, clearApiKey } from "./auth";
 import { resetConnectPrompt } from "./session";
-import { appName, isRegistered } from "./state";
+import { appName, getConnectionMode, isRegistered } from "./state";
 import { canBrowserSignIn } from "./hosts";
 import { confirmSignInWithoutNode, isNpxAvailable, promptNodeMissing } from "./node-check";
 import { log } from "./log";
@@ -403,8 +403,17 @@ function reportOutcome(o: Outcome): void {
   if (o.ok) {
     const who = `Signed in to Mnemoverse${o.email ? ` as ${o.email}` : ""}`;
     // "Connected" only when something will actually use the key: the lm
-    // provider is registered AND the local server can start. Otherwise report
-    // the sign-in alone and, if Node is the gap, say how to close it.
+    // provider is registered, the connection is still LOCAL (the user may have
+    // switched to hosted while the browser flow ran; the hosted definition
+    // ignores the key), AND the local server can start. Otherwise report the
+    // sign-in alone and, if Node is the gap on the local connection, say how
+    // to close it.
+    if (getConnectionMode() !== "local") {
+      void vscode.window.showInformationMessage(
+        `${who}. The key is kept for the local connection; you are on the hosted connection, which ${appName()} signs in to itself.`,
+      );
+      return;
+    }
     if (!isNpxAvailable()) {
       void vscode.window.showInformationMessage(`${who}.`);
       void promptNodeMissing();

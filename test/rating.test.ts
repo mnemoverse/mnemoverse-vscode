@@ -124,6 +124,23 @@ describe("rating prompt (glue)", () => {
     expect(vscode.__state.messages.at(-1)!.message).toContain("A rating on Open VSX");
   });
 
+  // Review (Copilot): an entry in Antigravity's config cannot sign in today
+  // (its redirect is not accepted), so it is not a working setup to ask about.
+  it("Antigravity: never asks, even with Mnemoverse in its config", async () => {
+    fs.mkdirSync(path.join(home, ".gemini", "config"), { recursive: true });
+    fs.writeFileSync(
+      path.join(home, ".gemini", "config", "mcp_config.json"),
+      JSON.stringify({ mcpServers: { mnemoverse: { serverUrl: "https://mcp.mnemoverse.com/mcp" } } }),
+    );
+    const { vscode, ext } = await load();
+    vscode.__setHost({ appName: "Antigravity", uriScheme: "antigravity" });
+    const ctx = vscode.__makeContext({ globalState: { "mnemoverse.rating": VETERAN_RATING } });
+    await ext.activate(ctx as never);
+    await flush();
+    const rating = await import("../src/rating");
+    expect(await rating.maybeAskForRating(ctx as never)).toBe(false);
+  });
+
   it("fires from the ~3-minute timer after activation, and the timer dies with the extension", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { vscode, ctx, rating } = await veteran();

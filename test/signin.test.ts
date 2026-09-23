@@ -119,6 +119,29 @@ describe("full keyless sign-in", () => {
     );
   }
 
+  // Review (Copilot): switching to the hosted connection while the browser
+  // flow runs must not end in "memory connected" (hosted ignores the key) or in
+  // a Node.js warning that only concerns the local server.
+  it("after a switch to hosted mid-flow, reports the sign-in without 'connected' or a Node prompt", async () => {
+    stubExchange();
+    const { vscode } = await activate({ appName: "VSCodium", uriScheme: "vscodium" });
+    const run = vscode.commands.executeCommand("mnemoverse.signIn");
+    await waitFor(() => vscode.__state.opened.length > 0);
+    const state = new URL(vscode.__state.opened[0]).searchParams.get("state")!;
+    await vscode.workspace.getConfiguration("mnemoverse").update("connection", "hosted");
+    process.env.PATH = ""; // no npx either: still no Node prompt on hosted
+    await vscode.__state.uriHandlers[0].handleUri(
+      vscode.Uri.parse(`vscodium://mnemoverse.mnemoverse-vscode/auth-callback?code=one-time&state=${state}`),
+    );
+    await run;
+    await flush();
+    const last = vscode.__state.messages.at(-1)!.message;
+    expect(last).toContain("Signed in to Mnemoverse as dev@example.com.");
+    expect(last).toContain("hosted connection");
+    expect(last).not.toContain("memory connected");
+    expect(vscode.__state.messages.some((m) => m.message.includes("Node.js"))).toBe(false);
+  });
+
   it("names the key after the editor and reports 'connected' only where the provider is registered", async () => {
     stubExchange();
     const { vscode, ctx, changes } = await activate({ appName: "VSCodium", uriScheme: "vscodium" });

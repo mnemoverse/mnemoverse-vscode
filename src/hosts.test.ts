@@ -181,6 +181,24 @@ describe("findMnemoverseServer — Cursor duplicate guard", () => {
     }
   });
 
+  // Review (Copilot): the host alone must not count, or an entry for another
+  // path on the same host would stop Cursor from getting the real /mcp server.
+  it("counts only the /mcp endpoint on the hosted host", () => {
+    for (const url of ["https://mcp.mnemoverse.com/mcp", "https://mcp.mnemoverse.com/mcp/", " https://MCP.mnemoverse.com/mcp "]) {
+      expect(findMnemoverseServer(JSON.stringify({ mcpServers: { m: { url } } })), url).toBe("m");
+    }
+    for (const url of [
+      "https://mcp.mnemoverse.com/other",
+      "https://mcp.mnemoverse.com/",
+      "https://mcp.mnemoverse.com/mcp/extra",
+      "https://mcp.mnemoverse.com:8443/mcp",
+      "https://mcp.mnemoverse.com/mcp?server=other",
+      "https://mcp.mnemoverse.com/mcp#x",
+    ]) {
+      expect(findMnemoverseServer(JSON.stringify({ mcpServers: { x: { url } } })), url).toBeUndefined();
+    }
+  });
+
   it("rejects lookalike or wrapped stdio entries", () => {
     const entries: Array<Record<string, unknown>> = [
       { command: "npx", args: ["-y", "@mnemoverse/mcp-memory-server-typo"] },

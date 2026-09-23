@@ -328,6 +328,7 @@ export function canBrowserSignIn(uriScheme: string | undefined): boolean {
 
 /** The hosted endpoint's host. Compared exactly, never as a substring. */
 const HOSTED_HOST = new URL(HOSTED_MCP_URL).hostname;
+const HOSTED_PATHS = new Set([new URL(HOSTED_MCP_URL).pathname, `${new URL(HOSTED_MCP_URL).pathname}/`]);
 
 /**
  * The npm package as a launcher argument: the bare name or name@version/tag.
@@ -405,14 +406,30 @@ function entryPointsAtMnemoverse(entry: Record<string, unknown>): boolean {
   return runsMnemoversePackage(entry.command, entry.args);
 }
 
-/** An https URL whose host is exactly the hosted endpoint's host. */
+/**
+ * The hosted MCP endpoint itself: https, host mcp.mnemoverse.com on the default
+ * port, path /mcp (a trailing slash tolerated), no credentials, query or
+ * fragment. The host alone is not enough: an entry for another path on the
+ * same host (a future endpoint, a typo) must not stop Cursor from getting the
+ * real /mcp server. The remote serves MCP only at /mcp (mnemoverse-mcp-remote
+ * src/index.ts).
+ */
 function isHostedUrl(value: unknown): boolean {
   if (typeof value !== "string") {
     return false;
   }
   try {
     const u = new URL(value.trim());
-    return u.protocol === "https:" && u.hostname.toLowerCase() === HOSTED_HOST && u.username === "" && u.password === "";
+    return (
+      u.protocol === "https:" &&
+      u.hostname.toLowerCase() === HOSTED_HOST &&
+      u.port === "" &&
+      HOSTED_PATHS.has(u.pathname) &&
+      u.search === "" &&
+      u.hash === "" &&
+      u.username === "" &&
+      u.password === ""
+    );
   } catch {
     return false;
   }
