@@ -117,13 +117,15 @@
     "test": "vitest run",
     "vscode:prepublish": "npm run compile",
     "package": "vsce package",
-    "publish": "vsce publish"
+    "check:version": "node scripts/check-version.mjs",
+    "check:package": "node scripts/check-package.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",
     "@types/vscode": "^1.102.0",
-    "@vscode/vsce": "^3.6.0",
+    "@vscode/vsce": "^4.0.0",
+    "ovsx": "^1.2.0",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.9"
+    "vitest": "^4.1.11"
   }
 }

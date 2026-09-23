@@ -1,31 +1,104 @@
 name: publish
 
-# Automated release pipeline for the Mnemoverse Memory VS Code extension.
+# Release pipeline for the Mnemoverse Memory extension
+# (Mnemoverse.mnemoverse-vscode on the VS Code Marketplace,
+#  mnemoverse/mnemoverse-vscode on Open VSX). How to cut a release:
+# docs/RELEASING.md.
 #
-# Trigger: push a semver tag `vX.Y.Z` (e.g. `git tag v0.1.0 && git push origin v0.1.0`).
+# TAG CONVENTION
+#   vX.Y.Z      stable release of package.json version X.Y.Z
+#   vX.Y.Z-pre  pre-release of package.json version X.Y.Z: packaged with
+#               --pre-release, which sets the pre-release flag in the .vsix
+#               manifest. Open VSX reads the flag from there; the
+#               Marketplace upload also passes --pre-release. The GitHub
+#               release is marked "pre-release". package.json itself stays
+#               plain X.Y.Z; the Marketplace does not accept semver
+#               pre-release suffixes.
+#   Both stores accept each version number once, so a version is either a
+#   pre-release or a stable release, never both. By Microsoft's convention
+#   pre-releases use odd minors (0.3.x) and stable releases even ones (0.4.x).
+#   Any other tag shape fails the build job.
 #
-# What this workflow does, in order:
-#   1. Checks out the tag.
-#   2. Verifies the tag version matches `package.json#version` (catches
-#      "forgot to bump" mistakes).
-#   3. `npm ci` + `npm run compile` (tsc to the out/ directory).
-#   4. Publishes to both VS Code Marketplace and Open VSX using
-#      `HaaLeo/publish-vscode-extension@v2`, which packages the .vsix once
-#      and uploads to both registries.
-#   5. Creates a GitHub release with auto-generated notes.
+# JOBS
+#   build        Checks out the tag, verifies it (tag == package.json version,
+#                lockfile and CHANGELOG agree, tagged commit is on main, the
+#                same version was not tagged in the other flavour), then
+#                npm ci, compile, test, checks the .vsix contents and packages
+#                it once. If the tag already has a GitHub release carrying the
+#                .vsix (a repeat run), it publishes that earlier file instead,
+#                after checking it holds exactly what this build holds.
+#                Uploads the result as the `vsix` artifact.
+#   openvsx      Publishes that exact .vsix to Open VSX with OVSX_PAT.
+#                Runs in the `openvsx` environment.
+#   marketplace  Publishes that exact .vsix to the VS Code Marketplace.
+#                Runs in the `marketplace` environment. Auth: Microsoft Entra
+#                ID (azure/login + `vsce --azure-credential`) when the
+#                AZURE_CLIENT_ID variable is set, else the VSCE_PAT secret.
+#                VSCE_PAT is an Azure DevOps global PAT, and those stop
+#                working on 2026-12-01; see the owner checklist in
+#                docs/RELEASING.md.
+#   release      Creates the GitHub release with the .vsix attached, if at
+#                least one store succeeded. The job summary and the release
+#                notes say, per store, whether this run uploaded the .vsix or
+#                the store already had the version.
 #
-# Prerequisite secrets (one-time setup at Settings > Secrets and variables > Actions):
+#   openvsx and marketplace are independent jobs on purpose. The previous
+#   single-job workflow ran the Marketplace step first, so a Marketplace auth
+#   failure also skipped Open VSX, which is the larger channel.
 #
-#   - VSCE_PAT — Azure DevOps Personal Access Token with "Marketplace: Manage"
-#     scope. Create at https://dev.azure.com. Publisher account `mnemoverse`
-#     must exist at https://marketplace.visualstudio.com/manage.
+# RE-RUNNING
+#   "Re-run failed jobs" on a partly failed run runs only the failed store
+#   job and `release` again (a store job that succeeded is not repeated),
+#   with the run's `vsix` artifact, so the bytes are the ones the other
+#   store got.
+#   A new run for an existing tag: Actions -> publish -> Run workflow, tag =
+#   the tag. `build` packages again, and `vsce package` is not
+#   byte-reproducible, so it publishes the .vsix already attached to the
+#   tag's GitHub release when there is one (see "Reuse the released .vsix").
+#   "Re-run all jobs" first looks for the `vsix` artifact an earlier
+#   attempt of the same run uploaded (the file that attempt's store jobs got,
+#   even if no GitHub release was created) and publishes it again without a
+#   second upload; only when there is none does it fall back to the release
+#   asset, as a new run does. Works for tags created after this
+#   workflow landed (older tags have no .nvmrc or scripts/check-version.mjs).
+#   --skip-duplicate covers a store job that failed after the store had
+#   accepted the upload, and fresh runs of a tag a store already has: the
+#   store reports success without uploading. The store jobs detect that and
+#   the release notes say so, instead of "published".
 #
-#   - OVSX_PAT — Open VSX access token. Create at https://open-vsx.org after
-#     signing the Eclipse Publisher Agreement. Namespace `mnemoverse` must
-#     exist; create it with `npx ovsx create-namespace mnemoverse -p <token>`.
+# SECRETS AND VARIABLES (Settings -> Secrets and variables -> Actions)
+#   OVSX_PAT          secret    Open VSX access token (namespace mnemoverse).
+#                               Environment secret on `openvsx`, or a
+#                               repository secret. Not on `marketplace`:
+#                               the openvsx job cannot read that one.
+#   VSCE_PAT          secret    Azure DevOps PAT, Marketplace (Manage) scope.
+#                               Fallback only; delete after the Entra switch.
+#   AZURE_CLIENT_ID   variable  Client ID of the user-assigned managed
+#                               identity that is a member of publisher
+#                               Mnemoverse. Setting it switches the
+#                               Marketplace job to Entra ID.
+#   AZURE_TENANT_ID   variable  Entra tenant of that identity.
 #
-# Neither secret has a backup — if lost, rotate and re-add. The workflow
-# fails loudly on missing secrets so you'll know immediately.
+# SECURITY NOTES
+#   - Workflow inputs and refs reach shell scripts only through `env:`,
+#     never through ${{ }} inside `run:` (expression injection).
+#   - Third-party actions are pinned by full commit SHA; Dependabot bumps them.
+#   - No npm cache in this workflow (setup-node's cache-poisoning guidance
+#     for jobs that handle secrets). Every job installs with
+#     --ignore-scripts, so no dependency install script runs in the job
+#     that builds the .vsix or in a job that later holds a store credential.
+#   - vsce and ovsx run as `npx --no ...`: --no makes npx fail when the
+#     locked devDependency is missing, instead of downloading whatever
+#     version the registry has and running it next to a store credential
+#     (in CI, npx otherwise installs a missing package with only a warning).
+#     Each call starts with a subcommand (`publish`, `package`); npx would
+#     treat a leading flag right after `--no <bin>` as its own option.
+#   - The ancestry check below stops accidental releases from unmerged
+#     commits. It does not stop a deliberate one: a tag push runs the
+#     workflow file at the tagged commit. The real gate is repository
+#     settings (a ruleset restricting who may create v* tags, and required
+#     reviewers / a deployment policy on the `openvsx` and `marketplace`
+#     environments); see docs/RELEASING.md.
 
 on:
   push:
@@ -34,85 +107,618 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to release (e.g. v0.1.1). Must already exist."
+        description: "Existing tag to publish, e.g. v0.4.0 or v0.3.0-pre"
         required: true
+        type: string
+
+# Nothing by default; each job asks for what it needs.
+permissions: {}
+
+# Never run two publishes of the same tag at the same time (a tag push and a
+# manual run, or two manual runs). Queued, not cancelled: a cancelled publish
+# can leave one store updated and the other not.
+concurrency:
+  group: publish-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    # Explicit `shell: bash` makes GitHub run with -eo pipefail.
+    shell: bash
 
 jobs:
-  publish:
+  build:
+    name: Build and verify
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
-      # Needed by softprops/action-gh-release to create the GitHub release.
-      contents: write
-
+      contents: read
+      # List and download this run's own artifacts on a re-run (see "Reuse
+      # this run's .vsix from an earlier attempt").
+      actions: read
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      vsix: ${{ steps.package.outputs.vsix }}
+      # The commit the tag pointed to when this job verified it. The store
+      # jobs check out this SHA, not the tag name again: a tag can be moved
+      # between build and a later publish (an approval wait, or "Re-run
+      # failed jobs" days later), and the ovsx/vsce that handle the store
+      # credentials must come from the lockfile build verified.
+      commit: ${{ steps.ancestry.outputs.commit }}
+      # "true" when the .vsix is the one an earlier run attached to the
+      # tag's GitHub release, not the one this run packaged.
+      reused: ${{ steps.reuse.outputs.reused }}
     steps:
-      - name: Checkout tag
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
-          fetch-depth: 0
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Verify tag matches package.json version
+      - name: Resolve the release tag
+        id: tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          set -euo pipefail
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          TAG_VERSION="${TAG#v}"
-          PKG_VERSION="$(node -p "require('./package.json').version")"
-          echo "tag:         $TAG"
-          echo "tag version: $TAG_VERSION"
-          echo "pkg version: $PKG_VERSION"
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::Tag $TAG (version $TAG_VERSION) does not match package.json version $PKG_VERSION"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="$REF_NAME"
+          fi
+          # Shape check before the value is used as a git ref. The full rules
+          # (version match, CHANGELOG, duplicates) run after checkout, in
+          # scripts/check-version.mjs.
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-pre)?$ ]]; then
+            # Print a sanitised copy: the raw value could carry a workflow command.
+            echo "::error::Not a release tag: '${TAG//[^A-Za-z0-9._-]/?}'. Use vX.Y.Z or vX.Y.Z-pre."
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ steps.tag.outputs.tag }}
+          # Full history and all tags: needed for the ancestry check and for
+          # the duplicate-version check in check-version.mjs.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify the tagged commit is on main
+        id: ancestry
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          # HEAD, not $GITHUB_SHA: on workflow_dispatch GITHUB_SHA is the head
+          # of the branch the run was started from, not the tag, and the
+          # check would pass trivially.
+          COMMIT="$(git rev-parse HEAD)"
+          if ! git rev-parse --verify --quiet refs/remotes/origin/main >/dev/null; then
+            echo "::error::origin/main was not fetched; cannot verify $TAG."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$COMMIT" refs/remotes/origin/main; then
+            echo "::error::$TAG points to $COMMIT, which is not on main. Merge the release PR, then tag the merge commit."
+            exit 1
+          fi
+          echo "$TAG -> $COMMIT is on main"
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node (version from .nvmrc)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Check versions (tag, package.json, lockfile, CHANGELOG)
+        id: version
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        # Writes version= and prerelease= to $GITHUB_OUTPUT.
+        run: node scripts/check-version.mjs --tag "$TAG"
+
+      # --ignore-scripts here too: this job builds the file that ships. The
+      # only install scripts in the tree are @vscode/vsce-sign's postinstall
+      # and keytar's `prebuild-install || npm run build` (via ovsx's nested
+      # @vscode/vsce); prebuild-install downloads a native binary that the
+      # lockfile's integrity hashes do not cover. Compile, test, vsce ls and
+      # vsce package need neither.
+      - name: Install dependencies (no install scripts)
+        run: npm ci --ignore-scripts
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Test
+        run: npm test
+
+      - name: Check .vsix contents (vsce ls)
+        run: npm run check:package
+
+      - name: Package
+        id: package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          VSIX="mnemoverse-vscode-${VERSION}.vsix"
+          ARGS=(package --out "$VSIX")
+          if [ "$PRERELEASE" = "true" ]; then
+            ARGS+=(--pre-release)
+          fi
+          npx --no vsce "${ARGS[@]}"
+          echo "vsix=$VSIX" >> "$GITHUB_OUTPUT"
+
+      # Why this step exists: `vsce package` is not byte-reproducible (the zip
+      # records timestamps), so every run of this job gives the same commit a
+      # new SHA-256. A GitHub release for the tag normally exists only because
+      # an earlier run got the version onto at least one store, and its .vsix
+      # is the file that store received. On a repeat run (Run workflow for an
+      # existing tag, or "Re-run all jobs") the store that already has the
+      # version skips the upload (--skip-duplicate), so publishing new bytes
+      # would leave that store, the other store and the release asset with
+      # different files. Publishing the earlier file keeps one SHA-256.
+      #
+      # The earlier file is used only if it holds exactly what this commit
+      # builds: the same zip entries and the same bytes in each. The package
+      # just built above still proves the tag compiles, passes tests and
+      # packages; this step only swaps the zip container.
+      # A re-run of this same run ("Re-run all jobs", attempt 2+) still has
+      # the `vsix` artifact the earlier attempt uploaded, and that is the file
+      # the earlier attempt's store jobs downloaded: a store may already serve
+      # exactly those bytes even if the GitHub release was never created (the
+      # release job failed, or never ran). Repackaging would give new bytes
+      # (vsce package is not byte-reproducible), and replacing the artifact
+      # would lose the ones a store has. So the earlier attempt's file is
+      # published again and the artifact is not uploaded a second time. It is
+      # used only if its contents match what this commit builds.
+      - name: Reuse this run's .vsix from an earlier attempt
+        id: attempt
+        if: github.run_attempt != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          VSIX: ${{ steps.package.outputs.vsix }}
+        run: |
+          ERR="$RUNNER_TEMP/artifacts.err"
+          if ! NAMES="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" --paginate --jq '.artifacts[] | select(.expired | not) | .name' 2>"$ERR")"; then
+            cat "$ERR" >&2
+            # Unknown state: guessing "no artifact" could publish new bytes
+            # next to a store that has the earlier attempt's.
+            echo "::error::Could not list this run's artifacts. Re-run the job."
+            exit 1
+          fi
+          if ! grep -qxF vsix <<<"$NAMES"; then
+            echo "No .vsix from an earlier attempt of this run; using this build."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          PREV="$RUNNER_TEMP/previous-attempt"
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name vsix --dir "$PREV"
+          if [ ! -f "$PREV/$VSIX" ]; then
+            echo "::error::This run's vsix artifact has no $VSIX. Start a new run instead of re-running this one."
+            exit 1
+          fi
+          if ! diff <(unzip -Z1 "$PREV/$VSIX" | LC_ALL=C sort) <(unzip -Z1 "$VSIX" | LC_ALL=C sort); then
+            echo "::error::The $VSIX from an earlier attempt has different files from what this commit builds now. A store may already serve that file: find out why before publishing."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/cmp-attempt/previous" "$RUNNER_TEMP/cmp-attempt/built"
+          unzip -q "$PREV/$VSIX" -d "$RUNNER_TEMP/cmp-attempt/previous"
+          unzip -q "$VSIX" -d "$RUNNER_TEMP/cmp-attempt/built"
+          if ! diff -r "$RUNNER_TEMP/cmp-attempt/previous" "$RUNNER_TEMP/cmp-attempt/built"; then
+            echo "::error::The $VSIX from an earlier attempt has different contents from what this commit builds now. A store may already serve that file: find out why before publishing."
+            exit 1
+          fi
+          mv -f "$PREV/$VSIX" "$VSIX"
+          echo "Publishing the $VSIX from an earlier attempt of this run (same contents as this build)."
+          echo "found=true" >> "$GITHUB_OUTPUT"
+
+      - name: Reuse the released .vsix if this tag already has one
+        id: reuse
+        # Skipped when an earlier attempt's file was found: that file is the
+        # one this run's stores got, and a release asset from this run is the
+        # same file.
+        if: steps.attempt.outputs.found != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          VSIX: ${{ steps.package.outputs.vsix }}
+        run: |
+          ERR="$RUNNER_TEMP/release-view.err"
+          if ASSETS="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>"$ERR")"; then
+            :
+          elif grep -q 'release not found' "$ERR"; then
+            ASSETS=""
+          else
+            # Unknown state: guessing "no release" could publish new bytes
+            # next to a store that has the old ones.
+            cat "$ERR" >&2
+            echo "::error::Could not read the GitHub release for $TAG. Re-run the job."
+            exit 1
+          fi
+          if ! grep -qxF "$VSIX" <<<"$ASSETS"; then
+            echo "Release $TAG has no $VSIX yet; publishing the file this run packaged."
+            echo "reused=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          OLD="$RUNNER_TEMP/released"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$VSIX" --dir "$OLD"
+          # Entry lists first: this also rejects duplicate or extra entries,
+          # which extracting and diffing directories would not show.
+          if ! diff <(unzip -Z1 "$OLD/$VSIX" | LC_ALL=C sort) <(unzip -Z1 "$VSIX" | LC_ALL=C sort); then
+            echo "::error::The $VSIX attached to release $TAG has different files from what $TAG builds now. A store may already serve that file: find out why before publishing. To publish a fresh build anyway, delete the asset from the release and run again."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/cmp/released" "$RUNNER_TEMP/cmp/built"
+          unzip -q "$OLD/$VSIX" -d "$RUNNER_TEMP/cmp/released"
+          unzip -q "$VSIX" -d "$RUNNER_TEMP/cmp/built"
+          if ! diff -r "$RUNNER_TEMP/cmp/released" "$RUNNER_TEMP/cmp/built"; then
+            echo "::error::The $VSIX attached to release $TAG has different contents from what $TAG builds now. A store may already serve that file: find out why before publishing. To publish a fresh build anyway, delete the asset from the release and run again."
+            exit 1
+          fi
+          mv -f "$OLD/$VSIX" "$VSIX"
+          echo "Publishing the $VSIX already attached to release $TAG (same contents as this build)."
+          echo "reused=true" >> "$GITHUB_OUTPUT"
+
+      - name: Check the pre-release flag and record the SHA-256
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          VSIX: ${{ steps.package.outputs.vsix }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+          REUSED: ${{ steps.reuse.outputs.reused }}
+          FROM_ATTEMPT: ${{ steps.attempt.outputs.found }}
+        run: |
+          # The pre-release flag lives in the package manifest, and that is
+          # what the stores read. Check it says what the tag says.
+          if unzip -p "$VSIX" extension.vsixmanifest | grep -q 'Id="Microsoft.VisualStudio.Code.PreRelease" Value="true"'; then
+            PACKAGED_PRE=true
+          else
+            PACKAGED_PRE=false
+          fi
+          if [ "$PACKAGED_PRE" != "$PRERELEASE" ]; then
+            echo "::error::Tag says prerelease=$PRERELEASE but the packaged manifest says $PACKAGED_PRE."
             exit 1
           fi
 
-      - name: Install dependencies
-        run: npm ci
+          SHA256="$(sha256sum "$VSIX" | cut -d' ' -f1)"
+          if [ "$FROM_ATTEMPT" = "true" ]; then
+            SOURCE="reused from an earlier attempt of this run (contents match this build); not uploaded again"
+          elif [ "$REUSED" = "true" ]; then
+            SOURCE="reused from GitHub release $TAG (contents match this build)"
+          else
+            SOURCE="packaged by this run"
+          fi
+          {
+            echo "### Package"
+            echo ""
+            echo "- File: \`$VSIX\` (pre-release: $PRERELEASE), $SOURCE"
+            echo "- SHA-256: \`$SHA256\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Compile TypeScript
-        run: npm run compile
-
-      # HaaLeo/publish-vscode-extension@v2 publishes to ONE registry per
-      # invocation. We run it twice — first for VS Code Marketplace, then
-      # Open VSX. The action packages a .vsix on the first run and reuses
-      # the same file for the second run via `packagePath`, so we avoid
-      # compiling + packaging twice.
-      #
-      # `ovsxPat` / `ovsxRegistryUrl` are NOT valid inputs — earlier
-      # attempts to cram both publishes into one step silently dropped
-      # the Open VSX upload. The comment exists so the next contributor
-      # doesn't reinvent that mistake.
-
-      - name: Publish to VS Code Marketplace
-        id: vsce
-        uses: HaaLeo/publish-vscode-extension@v2
+      - name: Upload .vsix
+        # On a re-run the earlier attempt's artifact is kept as it is (see
+        # "Reuse this run's .vsix from an earlier attempt"): no second upload,
+        # and no overwrite, which would replace bytes a store may already have.
+        if: steps.attempt.outputs.found != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          pat: ${{ secrets.VSCE_PAT }}
-          registryUrl: https://marketplace.visualstudio.com
+          name: vsix
+          path: ${{ steps.package.outputs.vsix }}
+          if-no-files-found: error
+          # Re-running failed jobs is possible for 30 days; keep the file
+          # that long so a re-run publishes the same bytes.
+          retention-days: 30
 
-      - name: Publish to Open VSX
-        uses: HaaLeo/publish-vscode-extension@v2
+  openvsx:
+    name: Publish to Open VSX
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Its own environment, so OVSX_PAT can be an environment secret behind a
+    # deployment policy (tag v* and main) and, optionally, required
+    # reviewers. Without it, OVSX_PAT has to be a repository secret: any run
+    # of any workflow could read it, and an approval on `marketplace` would
+    # not stop Open VSX, the larger store. Not `marketplace`: that name is
+    # the Entra federated-credential subject, and the jobs stay independent.
+    # A repository-level OVSX_PAT keeps working until it is moved.
+    # GitHub creates the environment on first use if it is missing.
+    environment: openvsx
+    permissions:
+      contents: read
+    outputs:
+      # "published", or "skipped" when Open VSX already had this version.
+      outcome: ${{ steps.publish.outputs.outcome }}
+    steps:
+      # Checkout + npm ci only to run the ovsx version locked in
+      # package-lock.json (`npx --no` below refuses any other); the .vsix
+      # itself comes from the build job.
+      - name: Checkout the commit build verified
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          pat: ${{ secrets.OVSX_PAT }}
-          registryUrl: https://open-vsx.org
-          # Re-use the .vsix packaged in the previous step instead of
-          # re-packaging from source.
-          extensionFile: ${{ steps.vsce.outputs.vsixPath }}
+          ref: ${{ needs.build.outputs.commit }}
+          persist-credentials: false
 
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+      - name: Setup Node (version from .nvmrc)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: ${{ github.event.inputs.tag || github.ref_name }}
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Install dependencies (no install scripts)
+        run: npm ci --ignore-scripts
+
+      - name: Download .vsix
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: vsix
+          path: dist
+
+      - name: Publish
+        id: publish
+        env:
+          # ovsx reads the token from OVSX_PAT itself (ovsx lib/util.js,
+          # addEnvOptions). Passing it as `-p "$OVSX_PAT"` would put it on
+          # the command line, where npm writes it unmasked to its debug log
+          # and process title.
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+          VSIX: dist/${{ needs.build.outputs.vsix }}
+        run: |
+          if [ -z "$OVSX_PAT" ]; then
+            echo "::error::The OVSX_PAT secret is not set (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+          # No --pre-release here: for a prepackaged .vsix ovsx ignores it
+          # and only prints "Ignoring option '--pre-release' for prepackaged
+          # extension." (ovsx lib/publish.js). Open VSX takes the flag from
+          # the manifest (Microsoft.VisualStudio.Code.PreRelease), which the
+          # build job checks against the tag.
+          # tee keeps the log visible; pipefail (shell: bash) keeps ovsx's
+          # exit code.
+          npx --no ovsx publish "$VSIX" --skip-duplicate 2>&1 | tee "$RUNNER_TEMP/publish.log"
+          # --skip-duplicate exits 0 when the store already has the version,
+          # so a green job alone does not say whether anything was uploaded.
+          # ovsx then prints "<id> v<version> is already published. Skipping
+          # publish." (ovsx lib/publish.js). Check the text again when
+          # Dependabot bumps ovsx.
+          if grep -q 'already published. Skipping publish.' "$RUNNER_TEMP/publish.log"; then
+            echo "outcome=skipped" >> "$GITHUB_OUTPUT"
+          else
+            echo "outcome=published" >> "$GITHUB_OUTPUT"
+          fi
+
+  marketplace:
+    name: Publish to VS Code Marketplace
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The Entra federated credential trusts exactly this subject:
+    #   repo:mnemoverse/mnemoverse-vscode:environment:marketplace
+    # Renaming the environment breaks Entra sign-in until the credential is
+    # updated. GitHub creates the environment on first use if it is missing.
+    environment: marketplace
+    permissions:
+      contents: read
+      # Job permissions cannot depend on a variable, so this is requested
+      # even while the PAT fallback is in use. The token it allows is only
+      # accepted by a federated credential that trusts the subject above.
+      id-token: write
+    outputs:
+      # "published", or "skipped" when the Marketplace already had this
+      # version. Exactly one of the two publish steps runs.
+      outcome: ${{ steps.publish_entra.outputs.outcome || steps.publish_pat.outputs.outcome }}
+    steps:
+      - name: Checkout the commit build verified
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.build.outputs.commit }}
+          persist-credentials: false
+
+      - name: Setup Node (version from .nvmrc)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Install dependencies (no install scripts)
+        run: npm ci --ignore-scripts
+
+      - name: Download .vsix
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: vsix
+          path: dist
+
+      - name: Sign in to Azure (Entra ID workload identity)
+        if: vars.AZURE_CLIENT_ID != ''
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          # The managed identity needs no Azure role, only Marketplace
+          # publisher membership, so it may see no subscription at all.
+          allow-no-subscriptions: true
+
+      - name: Publish (Entra ID)
+        id: publish_entra
+        if: vars.AZURE_CLIENT_ID != ''
+        env:
+          VSIX: dist/${{ needs.build.outputs.vsix }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
+        run: |
+          # --azure-credential picks up the Azure CLI session azure/login
+          # just created and requests a token for the Azure DevOps resource.
+          ARGS=(publish --packagePath "$VSIX" --azure-credential --skip-duplicate)
+          if [ "$PRERELEASE" = "true" ]; then
+            ARGS+=(--pre-release)
+          fi
+          npx --no vsce "${ARGS[@]}" 2>&1 | tee "$RUNNER_TEMP/publish.log"
+          # Same skip detection as the openvsx job. vsce prints "Version
+          # <version> is already published. Skipping publish."
+          # (@vscode/vsce out/publish.js).
+          if grep -q 'already published. Skipping publish.' "$RUNNER_TEMP/publish.log"; then
+            echo "outcome=skipped" >> "$GITHUB_OUTPUT"
+          else
+            echo "outcome=published" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish (VSCE_PAT fallback)
+        id: publish_pat
+        if: vars.AZURE_CLIENT_ID == ''
+        env:
+          # vsce's -p defaults to the VSCE_PAT environment variable
+          # (@vscode/vsce out/main.js), so the token never goes on the
+          # command line (npm's debug log and process title).
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          VSIX: dist/${{ needs.build.outputs.vsix }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "::error::Neither the AZURE_CLIENT_ID variable nor the VSCE_PAT secret is set. See docs/RELEASING.md."
+            exit 1
+          fi
+          echo "::warning::Marketplace publish used VSCE_PAT. Azure DevOps global PATs stop working on 2026-12-01; switch to Entra ID (docs/RELEASING.md, owner checklist)."
+          ARGS=(publish --packagePath "$VSIX" --skip-duplicate)
+          if [ "$PRERELEASE" = "true" ]; then
+            ARGS+=(--pre-release)
+          fi
+          npx --no vsce "${ARGS[@]}" 2>&1 | tee "$RUNNER_TEMP/publish.log"
+          if grep -q 'already published. Skipping publish.' "$RUNNER_TEMP/publish.log"; then
+            echo "outcome=skipped" >> "$GITHUB_OUTPUT"
+          else
+            echo "outcome=published" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    name: GitHub release
+    needs: [build, openvsx, marketplace]
+    # always(): run even when one store job failed, so the release and its
+    # .vsix exist for the store that worked. Skip when both store jobs failed.
+    if: >-
+      always() &&
+      needs.build.result == 'success' &&
+      (needs.openvsx.result == 'success' || needs.marketplace.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download .vsix
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: vsix
+          path: dist
+
+      - name: Write release notes and job summary
+        env:
+          TAG: ${{ needs.build.outputs.tag }}
+          VERSION: ${{ needs.build.outputs.version }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
+          VSIX: ${{ needs.build.outputs.vsix }}
+          OPENVSX_RESULT: ${{ needs.openvsx.result }}
+          MARKETPLACE_RESULT: ${{ needs.marketplace.result }}
+          OPENVSX_OUTCOME: ${{ needs.openvsx.outputs.outcome }}
+          MARKETPLACE_OUTCOME: ${{ needs.marketplace.outputs.outcome }}
+          REUSED: ${{ needs.build.outputs.reused }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          MARKETPLACE_URL="https://marketplace.visualstudio.com/items?itemName=Mnemoverse.mnemoverse-vscode"
+          OPENVSX_URL="https://open-vsx.org/extension/mnemoverse/mnemoverse-vscode"
+          SHA256="$(sha256sum "dist/$VSIX" | cut -d' ' -f1)"
+
+          # $1 = the store job's result, $2 = its outcome output. A skipped
+          # upload is a green job too, so the result alone would say
+          # "published" for a store that never received this file.
+          status() {
+            if [ "$1" != "success" ]; then
+              echo "not published (job $1)"
+            elif [ "$2" = "skipped" ]; then
+              echo "already had $VERSION; not uploaded again"
+            else
+              echo "published"
+            fi
+          }
+
+          # Which stores received dist/$VSIX from this run, and which
+          # already had the version from an earlier upload.
+          UPLOADED=()
+          SKIPPED=()
+          for entry in "VS Code Marketplace|$MARKETPLACE_RESULT|$MARKETPLACE_OUTCOME" "Open VSX|$OPENVSX_RESULT|$OPENVSX_OUTCOME"; do
+            IFS='|' read -r store result outcome <<<"$entry"
+            if [ "$result" = "success" ] && [ "$outcome" = "skipped" ]; then
+              SKIPPED+=("$store")
+            elif [ "$result" = "success" ]; then
+              UPLOADED+=("$store")
+            fi
+          done
+          join_and() {
+            if [ "$#" -eq 2 ]; then echo "$1 and $2"; else echo "$1"; fi
+          }
+
+          {
+            echo "## $TAG"
+            echo ""
+            echo "| Store | Result |"
+            echo "| --- | --- |"
+            echo "| [VS Code Marketplace]($MARKETPLACE_URL) | $(status "$MARKETPLACE_RESULT" "$MARKETPLACE_OUTCOME") |"
+            echo "| [Open VSX]($OPENVSX_URL) | $(status "$OPENVSX_RESULT" "$OPENVSX_OUTCOME") |"
+            echo ""
+            if [ "$REUSED" = "true" ]; then
+              echo "\`$VSIX\` is the file an earlier run attached to this release, reused instead of repackaged."
+              echo ""
+            fi
+            if [ "$MARKETPLACE_RESULT" != "success" ] || [ "$OPENVSX_RESULT" != "success" ]; then
+              echo "One store failed. Fix the cause, then use **Re-run failed jobs** on this run:"
+              echo "only the failed store job and this job run again, with this run's \`$VSIX\`."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for pair in "VS Code Marketplace:$MARKETPLACE_RESULT" "Open VSX:$OPENVSX_RESULT"; do
+            if [ "${pair#*:}" != "success" ]; then
+              echo "::warning::${pair%%:*} was not published (job ${pair#*:}). Re-run the failed job: $RUN_URL"
+            fi
+          done
+
+          {
+            if [ "$PRERELEASE" = "true" ]; then
+              echo "Pre-release of Mnemoverse Memory $VERSION. The stores offer it only to users who choose"
+              echo "**Switch to Pre-Release Version** on the extension page; everyone else stays on the latest stable release."
+            else
+              echo "Mnemoverse Memory $VERSION."
+            fi
+            echo ""
+            echo "| Store | This version |"
+            echo "| --- | --- |"
+            echo "| [VS Code Marketplace]($MARKETPLACE_URL) | $(status "$MARKETPLACE_RESULT" "$MARKETPLACE_OUTCOME") |"
+            echo "| [Open VSX]($OPENVSX_URL) | $(status "$OPENVSX_RESULT" "$OPENVSX_OUTCOME") |"
+            echo ""
+            if [ "${#UPLOADED[@]}" -gt 0 ]; then
+              echo "\`$VSIX\` below is the file this run uploaded to $(join_and "${UPLOADED[@]}")."
+            else
+              echo "This run uploaded \`$VSIX\` to neither store."
+            fi
+            if [ "$REUSED" = "true" ]; then
+              echo "It is the file an earlier run attached to this release; this run did not repackage."
+            elif [ "${#SKIPPED[@]}" -gt 0 ]; then
+              echo "$(join_and "${SKIPPED[@]}") already had $VERSION from an earlier upload, which may not be byte-identical to this file."
+            fi
+            echo "SHA-256: \`$SHA256\`"
+            echo ""
+            echo "Changes: [CHANGELOG.md]($REPO_URL/blob/$TAG/CHANGELOG.md)"
+          } > release-notes.md
+
+      - name: Create or update the GitHub release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          tag_name: ${{ needs.build.outputs.tag }}
+          name: ${{ needs.build.outputs.tag }}
+          prerelease: ${{ needs.build.outputs.prerelease == 'true' }}
+          body_path: release-notes.md
           generate_release_notes: true
-          body: |
-            Published automatically via `.github/workflows/publish.yml`.
-
-            - **VS Code Marketplace**: https://marketplace.visualstudio.com/items?itemName=mnemoverse.mnemoverse-vscode
-            - **Open VSX Registry**: https://open-vsx.org/extension/mnemoverse/mnemoverse-vscode
-
-            See the [CHANGELOG](https://github.com/mnemoverse/mnemoverse-vscode/blob/main/CHANGELOG.md) for details.
+          files: dist/${{ needs.build.outputs.vsix }}
+          fail_on_unmatched_files: true
+          # When build reused the release's .vsix, the asset is already this
+          # exact file; leave it in place rather than delete and re-upload it.
+          # Otherwise the release normally has no .vsix yet, and the default
+          # (replace) applies.
+          overwrite_files: ${{ needs.build.outputs.reused != 'true' }}

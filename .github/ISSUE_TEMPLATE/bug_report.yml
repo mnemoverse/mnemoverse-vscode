@@ -1,0 +1,81 @@
+name: Bug report
+description: Something in the Mnemoverse Memory extension does not work as expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Security problems do not belong here: use a
+        [private security advisory](https://github.com/mnemoverse/mnemoverse-vscode/security/advisories/new)
+        or security@mnemoverse.com instead.
+
+        **Do not paste your API key.** Keys start with `mk_live_`; replace them with `mk_live_…` in anything you paste below.
+
+  - type: dropdown
+    id: editor
+    attributes:
+      label: Editor
+      options:
+        - VS Code
+        - VS Code Insiders
+        - Cursor
+        - Windsurf / Devin
+        - Kiro
+        - VSCodium
+        - Other (name it under "What happened")
+    validations:
+      required: true
+
+  - type: input
+    id: editor-version
+    attributes:
+      label: Editor version
+      description: Help → About (on macOS, the app menu → About). Copy the version line.
+      placeholder: "1.105.0"
+    validations:
+      required: true
+
+  - type: input
+    id: extension-version
+    attributes:
+      label: Extension version
+      description: Extensions view → Mnemoverse Memory. Say if it is a pre-release version.
+      placeholder: "0.2.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection
+      description: How the editor reaches Mnemoverse.
+      options:
+        - Local (the extension starts @mnemoverse/mcp-memory-server with npx)
+        - Hosted (https://mcp.mnemoverse.com/mcp)
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Include the exact text of any error notification.
+      placeholder: |
+        1. Ran "Mnemoverse: Sign In"
+        2. Approved in the browser
+        3. Expected … but …
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Mnemoverse log output
+      description: |
+        The MCP server's output: Command Palette → "MCP: List Servers" → Mnemoverse Memory → Show Output.
+        The extension's own messages start with `[mnemoverse]`: Output panel → "Extension Host", or Help → Toggle Developer Tools → Console.
+        Remove API keys and anything else private before pasting.
+      render: text
+    validations:
+      required: false
