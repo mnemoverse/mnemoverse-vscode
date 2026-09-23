@@ -339,6 +339,11 @@ jobs:
           # Re-running failed jobs is possible for 30 days; keep the file
           # that long so a re-run publishes the same bytes.
           retention-days: 30
+          # "Re-run all jobs" keeps the run id, and artifact names are unique
+          # per run: without this the rebuilt upload fails on the name before
+          # either store job runs. The bytes are the same either way — a repeat
+          # run reuses the released .vsix (see "Reuse the released .vsix").
+          overwrite: true
 
   openvsx:
     name: Publish to Open VSX

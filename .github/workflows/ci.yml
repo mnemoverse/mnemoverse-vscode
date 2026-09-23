@@ -96,3 +96,6 @@ jobs:
           path: ${{ steps.package.outputs.vsix }}
           if-no-files-found: error
           retention-days: 14
+          # A re-run keeps the run id, and artifact names are unique per run:
+          # replace the previous attempt's file instead of failing on the name.
+          overwrite: true
