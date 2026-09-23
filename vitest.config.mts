@@ -6,6 +6,9 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    // src/: the extension's unit tests. scripts/: the CI gates
+    // (check-version, check-package), tested so a release cannot be
+    // blocked or waved through by a regex mistake.
+    include: ["src/**/*.test.ts", "scripts/**/*.test.mjs"],
   },
 });
