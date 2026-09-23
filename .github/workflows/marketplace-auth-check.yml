@@ -90,13 +90,15 @@ jobs:
       - name: Verify (VSCE_PAT)
         if: vars.AZURE_CLIENT_ID == ''
         env:
+          # vsce verify-pat reads VSCE_PAT when -p is not given, which keeps
+          # the token off the command line (npm's debug log, process title).
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
           if [ -z "$VSCE_PAT" ]; then
             echo "::error::Neither the AZURE_CLIENT_ID variable nor the VSCE_PAT secret is set."
             exit 1
           fi
-          npx vsce verify-pat Mnemoverse -p "$VSCE_PAT"
+          npx vsce verify-pat Mnemoverse
           {
             echo "VSCE_PAT works today. Azure DevOps global PATs stop working on 2026-12-01;"
             echo "set AZURE_CLIENT_ID / AZURE_TENANT_ID (docs/RELEASING.md) and run this again."

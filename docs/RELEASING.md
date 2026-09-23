@@ -21,7 +21,7 @@ Pushing a release tag starts the workflow. Nobody publishes from a laptop:
 | Tag | Meaning | `package.json` version |
 | --- | --- | --- |
 | `vX.Y.Z` | stable release | `X.Y.Z` |
-| `vX.Y.Z-pre` | pre-release, published with `--pre-release` | `X.Y.Z` (no suffix) |
+| `vX.Y.Z-pre` | pre-release, packaged with `--pre-release` | `X.Y.Z` (no suffix) |
 
 - `package.json` always holds plain `X.Y.Z`. The Marketplace rejects semver
   pre-release suffixes; "pre-release" is a flag on the upload.
@@ -85,17 +85,20 @@ git tag -a v0.3.0-pre origin/main -m "v0.3.0-pre"
 git push origin v0.3.0-pre
 ```
 
-The build packages with `vsce package --pre-release`, checks that the packaged
-manifest carries the pre-release flag, publishes to both stores with
-`--pre-release`, and marks the GitHub release as a pre-release.
+The build packages with `vsce package --pre-release`, which sets the
+pre-release flag in the `.vsix` manifest, and checks that the flag is there.
+The Marketplace upload also passes `--pre-release` (vsce refuses a package
+that was not built as a pre-release). Open VSX reads the flag from the
+package; `ovsx publish` ignores `--pre-release` for a prepackaged `.vsix`, so
+the workflow does not pass it. The GitHub release is marked as a pre-release.
 
 ## What the workflow does
 
 | Job | Needs | Does | Permissions |
 | --- | --- | --- | --- |
 | `build` | | Resolves the tag (push ref or the `tag` input), requires `vX.Y.Z` / `vX.Y.Z-pre`, checks out the tag with full history, requires the tagged commit to be on `origin/main`, runs `scripts/check-version.mjs --tag` (tag = package.json = lockfile, exact CHANGELOG heading, no duplicate flavour of the version), `npm ci`, compile, test, `check:package` (what `vsce ls` would ship), `vsce package` once. If the tag already has a GitHub release with the `.vsix`, uses that file instead, after checking it has the same contents as the new package. Uploads the `vsix` artifact and records its SHA-256. | `contents: read` |
-| `openvsx` | build | `ovsx publish <vsix> -p $OVSX_PAT --skip-duplicate` (+ `--pre-release`), using the ovsx version locked in `package-lock.json`. | `contents: read` |
-| `marketplace` | build | In environment `marketplace`. With `vars.AZURE_CLIENT_ID` set: `azure/login` (OIDC), then `vsce publish --packagePath <vsix> --azure-credential --skip-duplicate`. Without it: the same with `-p $VSCE_PAT`, plus a deadline warning. | `contents: read`, `id-token: write` |
+| `openvsx` | build | `ovsx publish <vsix> --skip-duplicate` with the token in the `OVSX_PAT` environment variable, using the ovsx version locked in `package-lock.json`. The pre-release flag comes from the package. | `contents: read` |
+| `marketplace` | build | In environment `marketplace`. With `vars.AZURE_CLIENT_ID` set: `azure/login` (OIDC), then `vsce publish --packagePath <vsix> --azure-credential --skip-duplicate` (+ `--pre-release`). Without it: the same with the token in the `VSCE_PAT` environment variable instead of `--azure-credential`, plus a deadline warning. | `contents: read`, `id-token: write` |
 | `release` | all three | Runs if `build` succeeded and at least one store job succeeded. Creates or updates the GitHub release with the `.vsix`, its SHA-256, links to both stores and, per store, whether this run uploaded the file or the store already had the version; writes the same to the job summary. | `contents: write` |
 
 `openvsx` and `marketplace` do not depend on each other: one store failing

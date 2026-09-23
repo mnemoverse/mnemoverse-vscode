@@ -7,10 +7,13 @@ name: publish
 #
 # TAG CONVENTION
 #   vX.Y.Z      stable release of package.json version X.Y.Z
-#   vX.Y.Z-pre  pre-release of package.json version X.Y.Z: packaged and
-#               published with --pre-release, GitHub release marked
-#               "pre-release". package.json itself stays plain X.Y.Z; the
-#               Marketplace does not accept semver pre-release suffixes.
+#   vX.Y.Z-pre  pre-release of package.json version X.Y.Z: packaged with
+#               --pre-release, which sets the pre-release flag in the .vsix
+#               manifest. Open VSX reads the flag from there; the
+#               Marketplace upload also passes --pre-release. The GitHub
+#               release is marked "pre-release". package.json itself stays
+#               plain X.Y.Z; the Marketplace does not accept semver
+#               pre-release suffixes.
 #   Both stores accept each version number once, so a version is either a
 #   pre-release or a stable release, never both. By Microsoft's convention
 #   pre-releases use odd minors (0.3.x) and stable releases even ones (0.4.x).
@@ -350,21 +353,25 @@ jobs:
       - name: Publish
         id: publish
         env:
+          # ovsx reads the token from OVSX_PAT itself (ovsx lib/util.js,
+          # addEnvOptions). Passing it as `-p "$OVSX_PAT"` would put it on
+          # the command line, where npm writes it unmasked to its debug log
+          # and process title.
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
           VSIX: dist/${{ needs.build.outputs.vsix }}
-          PRERELEASE: ${{ needs.build.outputs.prerelease }}
         run: |
           if [ -z "$OVSX_PAT" ]; then
             echo "::error::The OVSX_PAT secret is not set (Settings -> Secrets and variables -> Actions)."
             exit 1
           fi
-          ARGS=(publish "$VSIX" -p "$OVSX_PAT" --skip-duplicate)
-          if [ "$PRERELEASE" = "true" ]; then
-            ARGS+=(--pre-release)
-          fi
+          # No --pre-release here: for a prepackaged .vsix ovsx ignores it
+          # and only prints "Ignoring option '--pre-release' for prepackaged
+          # extension." (ovsx lib/publish.js). Open VSX takes the flag from
+          # the manifest (Microsoft.VisualStudio.Code.PreRelease), which the
+          # build job checks against the tag.
           # tee keeps the log visible; pipefail (shell: bash) keeps ovsx's
           # exit code.
-          npx ovsx "${ARGS[@]}" 2>&1 | tee "$RUNNER_TEMP/publish.log"
+          npx ovsx publish "$VSIX" --skip-duplicate 2>&1 | tee "$RUNNER_TEMP/publish.log"
           # --skip-duplicate exits 0 when the store already has the version,
           # so a green job alone does not say whether anything was uploaded.
           # ovsx then prints "<id> v<version> is already published. Skipping
@@ -455,6 +462,9 @@ jobs:
         id: publish_pat
         if: vars.AZURE_CLIENT_ID == ''
         env:
+          # vsce's -p defaults to the VSCE_PAT environment variable
+          # (@vscode/vsce out/main.js), so the token never goes on the
+          # command line (npm's debug log and process title).
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
           VSIX: dist/${{ needs.build.outputs.vsix }}
           PRERELEASE: ${{ needs.build.outputs.prerelease }}
@@ -464,7 +474,7 @@ jobs:
             exit 1
           fi
           echo "::warning::Marketplace publish used VSCE_PAT. Azure DevOps global PATs stop working on 2026-12-01; switch to Entra ID (docs/RELEASING.md, owner checklist)."
-          ARGS=(publish --packagePath "$VSIX" -p "$VSCE_PAT" --skip-duplicate)
+          ARGS=(publish --packagePath "$VSIX" --skip-duplicate)
           if [ "$PRERELEASE" = "true" ]; then
             ARGS+=(--pre-release)
           fi
