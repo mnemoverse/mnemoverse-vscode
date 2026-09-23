@@ -148,8 +148,12 @@ VSIX…**).
   has the same contents as the new package and publishes it instead, so both
   stores and the release keep one SHA-256. If the contents differ, `build`
   fails: a store may already serve the old file. Find out why before you delete
-  the asset from the release to force a fresh build. **Re-run all jobs**
-  behaves the same way.
+  the asset from the release to force a fresh build. **Re-run all jobs** first
+  looks for the `vsix` artifact an earlier attempt of the same run uploaded:
+  that is the file the earlier attempt's store jobs got, even when the release
+  job never attached it. If it is there and has the same contents, `build`
+  publishes it again and does not upload the artifact a second time; only
+  without it does `build` fall back to the release asset, as above.
 - **`--skip-duplicate`.** Both publish commands use it. It matters in two cases:
   a store job that failed after the store had already accepted the upload, and
   a fresh run for a tag that a store already has. The store then reports

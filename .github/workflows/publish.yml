@@ -55,7 +55,11 @@ name: publish
 #   the tag. `build` packages again, and `vsce package` is not
 #   byte-reproducible, so it publishes the .vsix already attached to the
 #   tag's GitHub release when there is one (see "Reuse the released .vsix").
-#   "Re-run all jobs" does the same. Works for tags created after this
+#   "Re-run all jobs" first looks for the `vsix` artifact an earlier
+#   attempt of the same run uploaded (the file that attempt's store jobs got,
+#   even if no GitHub release was created) and publishes it again without a
+#   second upload; only when there is none does it fall back to the release
+#   asset, as a new run does. Works for tags created after this
 #   workflow landed (older tags have no .nvmrc or scripts/check-version.mjs).
 #   --skip-duplicate covers a store job that failed after the store had
 #   accepted the upload, and fresh runs of a tag a store already has: the
@@ -129,6 +133,9 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      # List and download this run's own artifacts on a re-run (see "Reuse
+      # this run's .vsix from an earlier attempt").
+      actions: read
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
@@ -254,8 +261,63 @@ jobs:
       # builds: the same zip entries and the same bytes in each. The package
       # just built above still proves the tag compiles, passes tests and
       # packages; this step only swaps the zip container.
+      # A re-run of this same run ("Re-run all jobs", attempt 2+) still has
+      # the `vsix` artifact the earlier attempt uploaded, and that is the file
+      # the earlier attempt's store jobs downloaded: a store may already serve
+      # exactly those bytes even if the GitHub release was never created (the
+      # release job failed, or never ran). Repackaging would give new bytes
+      # (vsce package is not byte-reproducible), and replacing the artifact
+      # would lose the ones a store has. So the earlier attempt's file is
+      # published again and the artifact is not uploaded a second time. It is
+      # used only if its contents match what this commit builds.
+      - name: Reuse this run's .vsix from an earlier attempt
+        id: attempt
+        if: github.run_attempt != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          VSIX: ${{ steps.package.outputs.vsix }}
+        run: |
+          ERR="$RUNNER_TEMP/artifacts.err"
+          if ! NAMES="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" --paginate --jq '.artifacts[] | select(.expired | not) | .name' 2>"$ERR")"; then
+            cat "$ERR" >&2
+            # Unknown state: guessing "no artifact" could publish new bytes
+            # next to a store that has the earlier attempt's.
+            echo "::error::Could not list this run's artifacts. Re-run the job."
+            exit 1
+          fi
+          if ! grep -qxF vsix <<<"$NAMES"; then
+            echo "No .vsix from an earlier attempt of this run; using this build."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          PREV="$RUNNER_TEMP/previous-attempt"
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name vsix --dir "$PREV"
+          if [ ! -f "$PREV/$VSIX" ]; then
+            echo "::error::This run's vsix artifact has no $VSIX. Start a new run instead of re-running this one."
+            exit 1
+          fi
+          if ! diff <(unzip -Z1 "$PREV/$VSIX" | LC_ALL=C sort) <(unzip -Z1 "$VSIX" | LC_ALL=C sort); then
+            echo "::error::The $VSIX from an earlier attempt has different files from what this commit builds now. A store may already serve that file: find out why before publishing."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/cmp-attempt/previous" "$RUNNER_TEMP/cmp-attempt/built"
+          unzip -q "$PREV/$VSIX" -d "$RUNNER_TEMP/cmp-attempt/previous"
+          unzip -q "$VSIX" -d "$RUNNER_TEMP/cmp-attempt/built"
+          if ! diff -r "$RUNNER_TEMP/cmp-attempt/previous" "$RUNNER_TEMP/cmp-attempt/built"; then
+            echo "::error::The $VSIX from an earlier attempt has different contents from what this commit builds now. A store may already serve that file: find out why before publishing."
+            exit 1
+          fi
+          mv -f "$PREV/$VSIX" "$VSIX"
+          echo "Publishing the $VSIX from an earlier attempt of this run (same contents as this build)."
+          echo "found=true" >> "$GITHUB_OUTPUT"
+
       - name: Reuse the released .vsix if this tag already has one
         id: reuse
+        # Skipped when an earlier attempt's file was found: that file is the
+        # one this run's stores got, and a release asset from this run is the
+        # same file.
+        if: steps.attempt.outputs.found != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.tag.outputs.tag }}
@@ -304,6 +366,7 @@ jobs:
           VSIX: ${{ steps.package.outputs.vsix }}
           PRERELEASE: ${{ steps.version.outputs.prerelease }}
           REUSED: ${{ steps.reuse.outputs.reused }}
+          FROM_ATTEMPT: ${{ steps.attempt.outputs.found }}
         run: |
           # The pre-release flag lives in the package manifest, and that is
           # what the stores read. Check it says what the tag says.
@@ -318,7 +381,9 @@ jobs:
           fi
 
           SHA256="$(sha256sum "$VSIX" | cut -d' ' -f1)"
-          if [ "$REUSED" = "true" ]; then
+          if [ "$FROM_ATTEMPT" = "true" ]; then
+            SOURCE="reused from an earlier attempt of this run (contents match this build); not uploaded again"
+          elif [ "$REUSED" = "true" ]; then
             SOURCE="reused from GitHub release $TAG (contents match this build)"
           else
             SOURCE="packaged by this run"
@@ -331,6 +396,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload .vsix
+        # On a re-run the earlier attempt's artifact is kept as it is (see
+        # "Reuse this run's .vsix from an earlier attempt"): no second upload,
+        # and no overwrite, which would replace bytes a store may already have.
+        if: steps.attempt.outputs.found != 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: vsix
@@ -339,11 +408,6 @@ jobs:
           # Re-running failed jobs is possible for 30 days; keep the file
           # that long so a re-run publishes the same bytes.
           retention-days: 30
-          # "Re-run all jobs" keeps the run id, and artifact names are unique
-          # per run: without this the rebuilt upload fails on the name before
-          # either store job runs. The bytes are the same either way — a repeat
-          # run reuses the released .vsix (see "Reuse the released .vsix").
-          overwrite: true
 
   openvsx:
     name: Publish to Open VSX
