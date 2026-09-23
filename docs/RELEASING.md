@@ -68,8 +68,11 @@ rewrites parts of it.
    git tag -a v0.4.0 origin/main -m "v0.4.0"
    git push origin v0.4.0
    ```
-7. Watch **Actions → publish**. If the `marketplace` environment has required
-   reviewers, approve the Marketplace job there.
+7. Watch **Actions → publish**. Each store job runs in its own environment
+   (`openvsx`, `marketplace`). If an environment has required reviewers,
+   approve that store's job there. Rejecting one stops only that store; the
+   other store and the GitHub release still go ahead. To stop the release as a
+   whole, reject both, or cancel the run while the store jobs are waiting.
 8. Check both store pages show 0.4.0 (the Marketplace can take a few minutes)
    and that the GitHub release has the `.vsix` attached.
 
@@ -97,12 +100,15 @@ the workflow does not pass it. The GitHub release is marked as a pre-release.
 | Job | Needs | Does | Permissions |
 | --- | --- | --- | --- |
 | `build` | | Resolves the tag (push ref or the `tag` input), requires `vX.Y.Z` / `vX.Y.Z-pre`, checks out the tag with full history, requires the tagged commit to be on `origin/main`, runs `scripts/check-version.mjs --tag` (tag = package.json = lockfile, exact CHANGELOG heading, no duplicate flavour of the version), `npm ci --ignore-scripts`, compile, test, `check:package` (what `vsce ls` would ship), `vsce package` once. If the tag already has a GitHub release with the `.vsix`, uses that file instead, after checking it has the same contents as the new package. Uploads the `vsix` artifact and records its SHA-256. | `contents: read` |
-| `openvsx` | build | `ovsx publish <vsix> --skip-duplicate` with the token in the `OVSX_PAT` environment variable, using the ovsx version locked in `package-lock.json`. The pre-release flag comes from the package. | `contents: read` |
+| `openvsx` | build | In environment `openvsx`. `ovsx publish <vsix> --skip-duplicate` with the token in the `OVSX_PAT` environment variable, using the ovsx version locked in `package-lock.json`. The pre-release flag comes from the package. | `contents: read` |
 | `marketplace` | build | In environment `marketplace`. With `vars.AZURE_CLIENT_ID` set: `azure/login` (OIDC), then `vsce publish --packagePath <vsix> --azure-credential --skip-duplicate` (+ `--pre-release`). Without it: the same with the token in the `VSCE_PAT` environment variable instead of `--azure-credential`, plus a deadline warning. | `contents: read`, `id-token: write` |
 | `release` | all three | Runs if `build` succeeded and at least one store job succeeded. Creates or updates the GitHub release with the `.vsix`, its SHA-256, links to both stores and, per store, whether this run uploaded the file or the store already had the version; writes the same to the job summary. | `contents: write` |
 
 `openvsx` and `marketplace` do not depend on each other: one store failing
-never blocks the other. Both publish the same `.vsix` file from `build`.
+never blocks the other. Both publish the same `.vsix` file from `build`, and
+both check out the commit `build` verified (by SHA, not the tag name again),
+so the `ovsx` and `vsce` that handle the store credentials come from the
+lockfile `build` checked.
 
 `vsce package` is not byte-reproducible: packaging the same commit twice gives
 two different SHA-256 values. That is why `build` publishes the `.vsix`
@@ -154,14 +160,20 @@ VSIX…**).
 
 ## Secrets and variables
 
-Set under **Settings → Secrets and variables → Actions**, at repository level
-or on the `marketplace` environment (environment values win).
+A job can read repository secrets and variables, plus those of the
+environment it runs in; a value set on an environment wins over a repository
+value of the same name. So each secret belongs either at repository level
+(**Settings → Secrets and variables → Actions**) or on the environment of the
+job that uses it (**Settings → Environments → *name***), never on the other
+store's environment. `OVSX_PAT` set only on `marketplace` is empty in the
+`openvsx` job, and every Open VSX publish fails with "The OVSX_PAT secret is
+not set".
 
 | Name | Kind | Used by | Notes |
 | --- | --- | --- | --- |
-| `OVSX_PAT` | secret | `openvsx` | Open VSX access token (open-vsx.org → Settings → Access Tokens) for a member of namespace `mnemoverse`. |
-| `VSCE_PAT` | secret | `marketplace` (fallback) | Azure DevOps PAT, organization "All accessible organizations", scope Marketplace → Manage. **Stops working 2026-12-01.** Delete after the Entra switch. |
-| `AZURE_CLIENT_ID` | variable | `marketplace`, `marketplace-auth-check` | Client ID of the user-assigned managed identity. Setting it switches the Marketplace job from the PAT to Entra ID. |
+| `OVSX_PAT` | secret: `openvsx` environment (recommended) or repository | `openvsx` | Open VSX access token (open-vsx.org → Settings → Access Tokens) for a member of namespace `mnemoverse`. **Not** on the `marketplace` environment. |
+| `VSCE_PAT` | secret: `marketplace` environment or repository | `marketplace` (fallback), `marketplace-auth-check` | Azure DevOps PAT, organization "All accessible organizations", scope Marketplace → Manage. **Stops working 2026-12-01.** Delete after the Entra switch. |
+| `AZURE_CLIENT_ID` | variable: repository or `marketplace` environment | `marketplace`, `marketplace-auth-check` | Client ID of the user-assigned managed identity. Setting it switches the Marketplace job from the PAT to Entra ID. |
 | `AZURE_TENANT_ID` | variable | same | Entra tenant (directory) ID of that identity. |
 
 Client and tenant IDs are identifiers, not secrets, so they are variables.
@@ -207,7 +219,9 @@ access. Aim to finish by mid-November.
 4. **GitHub environment `marketplace`** (*Settings → Environments*). The workflow
    creates it on first use if missing, but set it up now:
    - *Deployment branches and tags → Selected*: add tag pattern `v*`, and
-     `main` so `marketplace-auth-check` can run (or run that workflow from a tag).
+     `main`. `main` is needed for runs started with **Run workflow** from main:
+     a fresh `publish` run for an existing tag, and `marketplace-auth-check`
+     (or start those from a tag).
    - Optional: *Required reviewers* = the release owner. Every Marketplace
      publish then waits for one approval click.
 5. **Repository variables** `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` (step 2
@@ -258,8 +272,14 @@ These settings (owner, *Settings → Rules* and *Environments*) close that:
   admins.
 - **Branch ruleset** for `main`: require a pull request and the
   `Build, test, package` status check; block force pushes.
-- **`marketplace` environment** as in step 4. Optionally move `OVSX_PAT` into
-  an environment of its own with the same tag policy; the `openvsx` job would
-  then need an `environment:` line.
+- **`marketplace` environment** as in step 4.
+- **`openvsx` environment**, set up the same way: *Deployment branches and
+  tags → Selected* with tag pattern `v*` and `main`, and optionally *Required
+  reviewers*. Add `OVSX_PAT` there as an environment secret, then delete the
+  repository secret. Until then `OVSX_PAT` is a repository secret: a run of
+  any workflow file from any branch can read it, and no approval or tag policy
+  stands in front of Open VSX, the larger store. The `openvsx` job already
+  names this environment; GitHub creates it on the first run if it is missing,
+  and a repository-level `OVSX_PAT` keeps working meanwhile.
 - **Dependabot security updates** on (*Settings → Code security*).
   `.github/dependabot.yml` covers version updates.

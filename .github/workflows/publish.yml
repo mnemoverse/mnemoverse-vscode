@@ -29,6 +29,7 @@ name: publish
 #                after checking it holds exactly what this build holds.
 #                Uploads the result as the `vsix` artifact.
 #   openvsx      Publishes that exact .vsix to Open VSX with OVSX_PAT.
+#                Runs in the `openvsx` environment.
 #   marketplace  Publishes that exact .vsix to the VS Code Marketplace.
 #                Runs in the `marketplace` environment. Auth: Microsoft Entra
 #                ID (azure/login + `vsce --azure-credential`) when the
@@ -63,6 +64,9 @@ name: publish
 #
 # SECRETS AND VARIABLES (Settings -> Secrets and variables -> Actions)
 #   OVSX_PAT          secret    Open VSX access token (namespace mnemoverse).
+#                               Environment secret on `openvsx`, or a
+#                               repository secret. Not on `marketplace`:
+#                               the openvsx job cannot read that one.
 #   VSCE_PAT          secret    Azure DevOps PAT, Marketplace (Manage) scope.
 #                               Fallback only; delete after the Entra switch.
 #   AZURE_CLIENT_ID   variable  Client ID of the user-assigned managed
@@ -89,8 +93,8 @@ name: publish
 #     commits. It does not stop a deliberate one: a tag push runs the
 #     workflow file at the tagged commit. The real gate is repository
 #     settings (a ruleset restricting who may create v* tags, and required
-#     reviewers / a tag-only deployment policy on the `marketplace`
-#     environment); see docs/RELEASING.md.
+#     reviewers / a deployment policy on the `openvsx` and `marketplace`
+#     environments); see docs/RELEASING.md.
 
 on:
   push:
@@ -130,6 +134,12 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
       vsix: ${{ steps.package.outputs.vsix }}
+      # The commit the tag pointed to when this job verified it. The store
+      # jobs check out this SHA, not the tag name again: a tag can be moved
+      # between build and a later publish (an approval wait, or "Re-run
+      # failed jobs" days later), and the ovsx/vsce that handle the store
+      # credentials must come from the lockfile build verified.
+      commit: ${{ steps.ancestry.outputs.commit }}
       # "true" when the .vsix is the one an earlier run attached to the
       # tag's GitHub release, not the one this run packaged.
       reused: ${{ steps.reuse.outputs.reused }}
@@ -166,6 +176,7 @@ jobs:
           persist-credentials: false
 
       - name: Verify the tagged commit is on main
+        id: ancestry
         env:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
@@ -182,6 +193,7 @@ jobs:
             exit 1
           fi
           echo "$TAG -> $COMMIT is on main"
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node (version from .nvmrc)
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -333,6 +345,15 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Its own environment, so OVSX_PAT can be an environment secret behind a
+    # deployment policy (tag v* and main) and, optionally, required
+    # reviewers. Without it, OVSX_PAT has to be a repository secret: any run
+    # of any workflow could read it, and an approval on `marketplace` would
+    # not stop Open VSX, the larger store. Not `marketplace`: that name is
+    # the Entra federated-credential subject, and the jobs stay independent.
+    # A repository-level OVSX_PAT keeps working until it is moved.
+    # GitHub creates the environment on first use if it is missing.
+    environment: openvsx
     permissions:
       contents: read
     outputs:
@@ -342,10 +363,10 @@ jobs:
       # Checkout + npm ci only to run the ovsx version locked in
       # package-lock.json (`npx --no` below refuses any other); the .vsix
       # itself comes from the build job.
-      - name: Checkout the tag
+      - name: Checkout the commit build verified
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ needs.build.outputs.tag }}
+          ref: ${{ needs.build.outputs.commit }}
           persist-credentials: false
 
       - name: Setup Node (version from .nvmrc)
@@ -417,10 +438,10 @@ jobs:
       # version. Exactly one of the two publish steps runs.
       outcome: ${{ steps.publish_entra.outputs.outcome || steps.publish_pat.outputs.outcome }}
     steps:
-      - name: Checkout the tag
+      - name: Checkout the commit build verified
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ needs.build.outputs.tag }}
+          ref: ${{ needs.build.outputs.commit }}
           persist-credentials: false
 
       - name: Setup Node (version from .nvmrc)
