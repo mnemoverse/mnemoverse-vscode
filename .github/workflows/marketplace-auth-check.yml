@@ -7,8 +7,10 @@ name: marketplace-auth-check
 # in docs/RELEASING.md): after setting AZURE_CLIENT_ID / AZURE_TENANT_ID, run
 # Actions -> marketplace-auth-check -> Run workflow. It signs in exactly like
 # publish.yml's marketplace job (same `marketplace` environment, so the same
-# federated-credential subject) and runs `vsce verify-pat` against publisher
-# Mnemoverse.
+# federated-credential subject), prints the identity's Marketplace profile id
+# (the id to add as a publisher member), and runs `vsce verify-pat` against
+# publisher Mnemoverse. On the first run, before the identity is a member,
+# the verify step is expected to fail; add the printed id, then run it again.
 #
 # What a green run proves: the identity (or PAT) can authenticate to the
 # Marketplace and has *some* role on the publisher. `verify-pat` accepts any
@@ -58,6 +60,26 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           allow-no-subscriptions: true
+
+      - name: Show the identity's Marketplace profile id
+        if: vars.AZURE_CLIENT_ID != ''
+        run: |
+          # The publisher's member list wants this Azure DevOps profile id,
+          # not the managed identity's client id. It can only be read while
+          # signed in as the identity, which is what this job is. The
+          # resource GUID is Azure DevOps' fixed application id.
+          PROFILE_ID="$(az rest \
+            -u https://app.vssps.visualstudio.com/_apis/profile/profiles/me \
+            --resource 499b84ac-1321-427f-aa17-267ca6975798 \
+            --query id -o tsv)"
+          echo "Marketplace profile id: $PROFILE_ID"
+          {
+            echo "Marketplace profile id of the identity: \`$PROFILE_ID\`"
+            echo ""
+            echo "Add it at https://marketplace.visualstudio.com/manage/publishers/mnemoverse"
+            echo "(Members -> Add, role Contributor) if the next step fails."
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify (Entra ID)
         if: vars.AZURE_CLIENT_ID != ''
