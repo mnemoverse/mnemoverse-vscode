@@ -247,14 +247,16 @@ export async function addToCursorSettings(): Promise<void> {
   const started = Date.now();
   let inFlight = false; // a slow read must not overlap the next tick and adopt twice
   pollTimer = setInterval(() => {
+    // The time limit is checked first and synchronously: a read still in
+    // flight must not keep the poll alive past the limit.
+    if (Date.now() - started > ADOPT_POLL_LIMIT_MS) {
+      stopPolling();
+      log.info("Cursor: stopped waiting for the MCP settings entry (it is picked up on window focus or the next reload)");
+      return;
+    }
     if (inFlight) return;
     inFlight = true;
     void (async () => {
-      if (Date.now() - started > ADOPT_POLL_LIMIT_MS) {
-        stopPolling();
-        log.info("Cursor: stopped waiting for the MCP settings entry (it is picked up on the next window reload)");
-        return;
-      }
       if (await recheckCursorSettings()) {
         const entry = getConfiguredEntry();
         void vscode.window.showInformationMessage(
