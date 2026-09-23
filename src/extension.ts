@@ -1,11 +1,11 @@
 import * as vscode from "vscode";
 import { registerProvider } from "./provider";
-import { clearApiKey, promptForApiKey, storeApiKey } from "./auth";
-import { signIn, signOut, handleUri, completeSignIn } from "./signin";
+import { clearApiKey, peekApiKey, promptForApiKey, storeApiKey } from "./auth";
+import { signInLocal, signOut, handleUri, completeSignIn } from "./signin";
 import { promptConnect } from "./prompts";
 import { wasConnectPromptShown } from "./session";
-import { decideShowWelcome } from "./signin-core";
-import { detectHostKind, identifyHost, type HostProbe } from "./hosts";
+import { CONSOLE_BASE_URL, decideShowWelcome } from "./signin-core";
+import { canBrowserSignIn, detectHostKind, identifyHost, type HostProbe } from "./hosts";
 import { initLog, log } from "./log";
 import {
   appName,
@@ -20,8 +20,21 @@ import {
   setRegistered,
   type HostInfo,
 } from "./state";
-import { confirmSetKeyInCursor, explainCursorSignIn, showCursorIntro, startCursorAdapter } from "./cursor";
-import { copyMcpConfig, explainGuidance, showGuidanceIntro } from "./guidance";
+import {
+  explainCursorSignIn,
+  explainCursorSignOut,
+  explainKeyNotUsedInCursor,
+  showCursorIntro,
+  startCursorAdapter,
+} from "./cursor";
+import {
+  copyMcpConfig,
+  explainGuidance,
+  explainGuidanceSignOut,
+  explainKeyNotUsedInGuidance,
+  findGuidanceConfigEntry,
+  showGuidanceIntro,
+} from "./guidance";
 import { openGetStarted, openMcpSettings, setConnectionMode, showMenu, tryIt } from "./menu";
 import { openGitHubRepo, openRatingPage, recordRatingActivation, scheduleRatingPrompt } from "./rating";
 
@@ -43,13 +56,17 @@ const DOCS_URL = "https://mnemoverse.com/docs/api/mcp-server";
  *   1. The "Mnemoverse" output channel, so everything after can be logged.
  *   2. The server-changed EventEmitter, pushed to subscriptions before anything
  *      that can throw (it can never leak).
- *   3. The URI handler and EVERY command. Nothing host-specific runs before
- *      these exist, so they work on any host, whatever happens next.
- *   4. The status bar item and the configuration listener.
- *   5. Host detection (hosts.ts) and the adapter it picks — lm, cursor or
+ *   3. EVERY command, in their own push: nothing host-specific runs before
+ *      they exist, so they work on any host, whatever happens next.
+ *   4. The URI handler, in its own try/catch. A thin host may lack or reject
+ *      `registerUriHandler`; that must cost only the automatic sign-in return
+ *      ("Mnemoverse: Complete sign-in" still works), not the commands — the
+ *      same failure 0.3.0 fixes for `vscode.lm`.
+ *   5. The status bar item and the configuration listener.
+ *   6. Host detection (hosts.ts) and the adapter it picks — lm, cursor or
  *      guidance — inside try/catch. Any failure falls back to guidance mode
  *      (honest setup help, nothing claimed), and the commands keep working.
- *   6. The first-run message for that adapter, and the delayed rating check.
+ *   7. The first-run message for that adapter, and the delayed rating check.
  *
  * Returns a promise that settles once the adapter has started; it never
  * rejects. Toasts are fire-and-forget: activation never waits on the user.
@@ -66,15 +83,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     void refreshKeyState(context);
   };
 
-  context.subscriptions.push(
-    // Browser keyless sign-in returns here via <scheme>://mnemoverse.mnemoverse-vscode/auth-callback.
-    vscode.window.registerUriHandler({
-      handleUri: (uri) => {
-        void handleUri(uri);
-      },
-    }),
-    ...registerCommands(context, onKeyChanged),
-  );
+  context.subscriptions.push(...registerCommands(context, onKeyChanged));
+
+  try {
+    context.subscriptions.push(
+      // Browser keyless sign-in returns here via <scheme>://mnemoverse.mnemoverse-vscode/auth-callback.
+      vscode.window.registerUriHandler({
+        handleUri: (uri) => {
+          void handleUri(uri);
+        },
+      }),
+    );
+  } catch (err) {
+    log.error(
+      'Could not register the sign-in callback handler; browser sign-in cannot return automatically (use "Mnemoverse: Complete sign-in")',
+      err,
+    );
+  }
 
   try {
     context.subscriptions.push(initStatusBar());
@@ -157,13 +182,21 @@ async function startHostAdapter(
         break;
       case "cursor": {
         const result = await startCursorAdapter();
-        setRegistered(result.registered, result.alreadyConfigured);
+        setRegistered(result.registered, result.configuredIn);
         break;
       }
-      case "guidance":
-        setRegistered(false);
-        log.info("No extension MCP API to use here; offering the config snippet instead");
+      case "guidance": {
+        // Read-only: has the user already pasted the snippet? Then the state
+        // says "In your MCP config" rather than "Set up needed" forever.
+        const found = await findGuidanceConfigEntry(host.id);
+        setRegistered(false, found);
+        log.info(
+          found
+            ? `No extension MCP API to use here; Mnemoverse is already in ${found.file} (server "${found.server}")`
+            : "No extension MCP API to use here; offering the config snippet instead",
+        );
         break;
+      }
     }
     return host.kind;
   } catch (err) {
@@ -180,7 +213,8 @@ async function startHostAdapter(
  *   - lm, hosted → none: the editor's own OAuth prompt appears on first use;
  *   - cursor     → where the server went and how to sign in (skipped when the
  *                  user's own Cursor config already had Mnemoverse);
- *   - guidance   → "<app> doesn't let extensions add MCP servers yet" + Copy config.
+ *   - guidance   → "<app> doesn't let extensions add MCP servers yet" + Copy config
+ *                  (skipped when the editor's config already has Mnemoverse).
  */
 async function showFirstRun(context: vscode.ExtensionContext, kind: HostInfo["kind"]): Promise<void> {
   try {
@@ -223,8 +257,12 @@ async function showWelcome(context: vscode.ExtensionContext): Promise<void> {
     return;
   }
   await context.globalState.update(WELCOME_SHOWN_KEY, true);
+  // Where the console refuses this editor's URI scheme, promptConnect offers a
+  // pasted key instead, so the welcome must not promise a browser sign-in.
   await promptConnect(
-    `Welcome to Mnemoverse. Sign in from your browser to connect memory to the agent in ${appName()}.`,
+    canBrowserSignIn(vscode.env.uriScheme)
+      ? `Welcome to Mnemoverse. Sign in from your browser to connect memory to the agent in ${appName()}.`
+      : `Welcome to Mnemoverse. Connect memory to the agent in ${appName()}.`,
   );
 }
 
@@ -245,7 +283,7 @@ function registerCommands(context: vscode.ExtensionContext, onKeyChanged: () => 
           if (getConnectionMode() === "hosted") {
             return explainHostedSignIn();
           }
-          return signIn(context, onKeyChanged);
+          return signInLocal(context, onKeyChanged);
       }
     },
     "mnemoverse.completeSignIn": async () => {
@@ -258,10 +296,37 @@ function registerCommands(context: vscode.ExtensionContext, onKeyChanged: () => 
           return completeSignIn();
       }
     },
-    "mnemoverse.signOut": () => signOut(context, onKeyChanged),
+    // Routed like Sign In. Only the local connection signs in through this
+    // extension; everywhere else the sign-in in use is the editor's own OAuth
+    // session, which this command cannot end — so it removes any key the
+    // extension stored (unused there) and says where the real sign-out is,
+    // instead of reporting "signed out" while memory keeps working.
+    "mnemoverse.signOut": async () => {
+      const kind = getHost().kind;
+      if (kind === "lm" && getConnectionMode() === "local") {
+        return signOut(context, onKeyChanged);
+      }
+      const removedKey = await removeStoredKey(context, onKeyChanged);
+      switch (kind) {
+        case "lm":
+          return explainHostedSignOut(removedKey);
+        case "cursor":
+          return explainCursorSignOut(removedKey);
+        case "guidance":
+          return explainGuidanceSignOut(removedKey);
+      }
+    },
     "mnemoverse.setApiKey": async () => {
-      if (getHost().kind === "cursor" && !(await confirmSetKeyInCursor())) {
-        return;
+      // A key is read only by the local server on lm hosts. Elsewhere nothing
+      // would ever use it (SecretStorage is per application), so explain
+      // instead of storing it and saying "saved".
+      switch (getHost().kind) {
+        case "cursor":
+          return explainKeyNotUsedInCursor();
+        case "guidance":
+          return explainKeyNotUsedInGuidance();
+        case "lm":
+          break;
       }
       // Prompt FIRST; only a valid entry replaces the stored key. Escape
       // leaves the existing key (and the running server) untouched.
@@ -272,7 +337,7 @@ function registerCommands(context: vscode.ExtensionContext, onKeyChanged: () => 
       await storeApiKey(context, key);
       onKeyChanged();
       await vscode.window.showInformationMessage(
-        getHost().kind === "lm" && getConnectionMode() === "hosted"
+        getConnectionMode() === "hosted"
           ? "Mnemoverse API key saved. It is used by the local connection; you are on the hosted connection."
           : "Mnemoverse API key saved.",
       );
@@ -328,6 +393,43 @@ async function explainHostedSignIn(): Promise<void> {
   );
   if (choice === "Use local connection") {
     await setConnectionMode("local");
+  }
+}
+
+/**
+ * Delete the key this extension stored, if there is one, and let the server
+ * and the state re-read. Returns whether a key was removed. Never prompts.
+ */
+async function removeStoredKey(context: vscode.ExtensionContext, onKeyChanged: () => void): Promise<boolean> {
+  if (!(await peekApiKey(context))) {
+    return false;
+  }
+  await clearApiKey(context);
+  onKeyChanged();
+  return true;
+}
+
+/**
+ * Sign Out while on the hosted connection. The live credential is the editor's
+ * own MCP OAuth session for auth.mnemoverse.com; the provider passes no header
+ * and resolve passes the HTTP definition through, so nothing this extension
+ * holds is involved. VS Code ends that session from "MCP: List Servers" →
+ * the server → Sign Out (or Disconnect Account when the account is shared).
+ */
+async function explainHostedSignOut(removedKey: boolean): Promise<void> {
+  const app = appName();
+  const keyNote = removedKey
+    ? " The key this extension kept for the local connection was removed from this device; it stays valid until you revoke it in the console."
+    : "";
+  const buttons = removedKey ? ["Open MCP servers", "Open console"] : ["Open MCP servers"];
+  const choice = await vscode.window.showInformationMessage(
+    `On the hosted connection, ${app} holds the Mnemoverse sign-in, not this extension. To sign out, run "MCP: List Servers", pick "Mnemoverse Memory" and choose Sign Out (or Disconnect Account).${keyNote}`,
+    ...buttons,
+  );
+  if (choice === "Open MCP servers") {
+    await openMcpSettings();
+  } else if (choice === "Open console") {
+    await vscode.env.openExternal(vscode.Uri.parse(CONSOLE_BASE_URL));
   }
 }
 

@@ -6,7 +6,12 @@
  * judge it and for whom it actually works. Every rule below exists to keep the
  * ask rare and well-timed:
  *
- *   - connected            — never ask someone the extension has not connected.
+ *   - connected            — never ask someone for whom memory is not known to
+ *                            be set up (state.ts `isKnownSetUp`: a working
+ *                            local key, the hosted connection chosen on
+ *                            purpose, or an entry in the user's own MCP config
+ *                            — not a server merely offered to an editor whose
+ *                            sign-in the extension cannot see).
  *   - >= 7 days installed  — a first-week user has not seen memory pay off yet.
  *   - >= 4 active days     — distinct calendar days the extension activated;
  *                            filters out "installed once, opened once".

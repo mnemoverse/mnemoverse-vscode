@@ -168,14 +168,41 @@ export interface McpConfigTarget {
   urlField: "url" | "serverUrl";
   /** Extra fixed fields for the server entry (e.g. VS Code's `type: "http"`). */
   extra?: Readonly<Record<string, string>>;
+  /**
+   * The same file(s) as paths relative to the home folder ("/"-separated), for
+   * a READ-ONLY check that the user already added Mnemoverse. Set only where
+   * the location is documented; without it the extension cannot tell whether
+   * the user finished the setup, and its state text says so instead of
+   * claiming "set up needed" forever.
+   */
+  homePaths?: readonly string[];
+  /**
+   * Whether auth.mnemoverse.com accepts this editor's own MCP sign-in (its
+   * OAuth redirect must be on the auth service's dynamic-registration
+   * allowlist: loopback, vscode.dev, cursor://anysphere.cursor-mcp/, ...).
+   *
+   *   - `accepted`     — checked against the allowlist.
+   *   - `unverified`   — the editor's redirect is not known; the text hedges.
+   *   - `not-accepted` — known to be refused today; the text says so rather
+   *                      than promising a browser sign-in that will fail.
+   */
+  signIn: "accepted" | "unverified" | "not-accepted";
+  /** A step after saving the file, for editors that do not pick up edits by themselves. */
+  afterSave?: string;
 }
 
-/** VS Code's own mcp.json format, shared by the upstream-based hosts. */
+/**
+ * VS Code's own mcp.json format, shared by the upstream-based hosts. VS Code's
+ * MCP OAuth redirects to a loopback address (desktop) or vscode.dev (web), both
+ * on the auth allowlist. No `homePaths`: the user mcp.json lives in a
+ * per-product, per-profile folder the extension does not try to guess.
+ */
 const VSCODE_MCP_JSON: McpConfigTarget = {
   file: 'your user mcp.json (Command Palette: "MCP: Open User Configuration")',
   rootKey: "servers",
   urlField: "url",
   extra: { type: "http" },
+  signIn: "accepted",
 };
 
 /** The common `mcpServers` + `url` shape most MCP clients accept. */
@@ -183,6 +210,7 @@ const DEFAULT_TARGET: McpConfigTarget = {
   file: "your editor's MCP config file",
   rootKey: "mcpServers",
   urlField: "url",
+  signIn: "unverified",
 };
 
 const MCP_CONFIG_TARGETS: Readonly<Partial<Record<HostId, McpConfigTarget>>> = {
@@ -192,32 +220,63 @@ const MCP_CONFIG_TARGETS: Readonly<Partial<Record<HostId, McpConfigTarget>>> = {
   "code-oss": VSCODE_MCP_JSON,
   positron: VSCODE_MCP_JSON,
   // Cursor's documented global file. Used only if the Cursor adapter could not
-  // register (the adapter itself never writes this file).
-  cursor: { file: "~/.cursor/mcp.json", rootKey: "mcpServers", urlField: "url" },
+  // register (the adapter itself never writes this file). Cursor's MCP OAuth
+  // callback, cursor://anysphere.cursor-mcp/, is on the auth allowlist.
+  cursor: {
+    file: "~/.cursor/mcp.json",
+    rootKey: "mcpServers",
+    urlField: "url",
+    homePaths: [".cursor/mcp.json"],
+    signIn: "accepted",
+  },
   // kiro.dev/docs/mcp/configuration: user file, remote `url`, hot-reloaded,
-  // OAuth via dynamic client registration with a loopback redirect.
-  kiro: { file: "~/.kiro/settings/mcp.json", rootKey: "mcpServers", urlField: "url" },
-  // Windsurf's Cascade reads `serverUrl` for remote servers.
-  windsurf: { file: "~/.codeium/windsurf/mcp_config.json", rootKey: "mcpServers", urlField: "serverUrl" },
+  // OAuth via dynamic client registration with a loopback redirect (allowed).
+  kiro: {
+    file: "~/.kiro/settings/mcp.json",
+    rootKey: "mcpServers",
+    urlField: "url",
+    homePaths: [".kiro/settings/mcp.json"],
+    signIn: "accepted",
+  },
+  // Windsurf's Cascade reads `serverUrl` for remote servers. Its OAuth
+  // redirect is not documented, so the sign-in promise is hedged.
+  windsurf: {
+    file: "~/.codeium/windsurf/mcp_config.json",
+    rootKey: "mcpServers",
+    urlField: "serverUrl",
+    homePaths: [".codeium/windsurf/mcp_config.json"],
+    signIn: "unverified",
+  },
   // Devin Desktop (ex-Windsurf) is mid-migration: the FAQ still names the
   // Windsurf file, while Devin Local reads the Devin CLI config. Both paths are
-  // shown; the `serverUrl` field follows Windsurf and is NOT verified for the
-  // Devin CLI file.
+  // shown and checked; the `serverUrl` field follows Windsurf and is NOT
+  // verified for the Devin CLI file.
   devin: {
     file: "~/.codeium/windsurf/mcp_config.json (or ~/.config/devin/mcp_config.json for Devin Local)",
     rootKey: "mcpServers",
     urlField: "serverUrl",
+    homePaths: [".codeium/windsurf/mcp_config.json", ".config/devin/mcp_config.json"],
+    signIn: "unverified",
   },
   // antigravity.google/docs/mcp: global file ~/.gemini/config/mcp_config.json,
-  // remote servers need `serverUrl` ("url" is not supported). Edits are not
-  // hot-reloaded. NOTE: its OAuth redirect (https://antigravity.google/oauth-callback)
-  // is not yet on auth.mnemoverse.com's dynamic-registration allowlist, so the
-  // sign-in step may be refused until the auth service admits it.
-  antigravity: { file: "~/.gemini/config/mcp_config.json", rootKey: "mcpServers", urlField: "serverUrl" },
+  // remote servers need `serverUrl` ("url" is not supported), and the IDE's MCP
+  // list has a Refresh button. Its OAuth redirect
+  // (https://antigravity.google/oauth-callback) is NOT on auth.mnemoverse.com's
+  // dynamic-registration allowlist (REGISTRATION_ALLOWED_REDIRECT_HOSTS in the
+  // auth service), so the sign-in is refused until the owner admits it. Flip
+  // `signIn` to "accepted" in the same change that allowlists it.
+  antigravity: {
+    file: "~/.gemini/config/mcp_config.json",
+    rootKey: "mcpServers",
+    urlField: "serverUrl",
+    homePaths: [".gemini/config/mcp_config.json"],
+    signIn: "not-accepted",
+    afterSave: "click Refresh in Antigravity's MCP server list (or restart Antigravity)",
+  },
   // UNVERIFIED: Trae's file location and field name come from third-party
   // reports (macOS: ~/Library/Application Support/Trae/User/mcp.json), not from
-  // Trae's docs or a real install. `url` is the common default.
-  trae: { file: "Trae's mcp.json (in Trae's MCP settings)", rootKey: "mcpServers", urlField: "url" },
+  // Trae's docs or a real install. `url` is the common default. No `homePaths`.
+  trae: { file: "Trae's mcp.json (in Trae's MCP settings)", rootKey: "mcpServers", urlField: "url", signIn: "unverified" },
 };
 
 /** The config target for a host, falling back to the common `mcpServers`/`url` shape. */
@@ -236,40 +295,97 @@ export function buildMcpConfigSnippet(host: HostId): string {
   return JSON.stringify({ [t.rootKey]: { mnemoverse: entry } }, null, 2);
 }
 
-// ---- Cursor duplicate guard -------------------------------------------------
+// ---- browser sign-in (the extension's own keyless flow) ---------------------
 
 /**
- * Markers that identify a Mnemoverse server in someone else's MCP config: the
- * hosted endpoint, or the npm package the local setup runs through npx.
- */
-const HOSTED_MARKER = "mcp.mnemoverse.com";
-const PACKAGE_MARKER = "@mnemoverse/mcp-memory-server";
-
-/**
- * Return the name of an existing Mnemoverse server entry in a Cursor-style
- * mcp.json, or `undefined` if there is none (or the text is not readable JSON).
+ * URI schemes the console's keyless sign-in accepts as a redirect back into the
+ * editor. MIRRORS `ALLOWED_EDITOR_SCHEMES` in mnemoverse-portal
+ * src/lib/extension-auth.ts — the portal is the authority; this copy only
+ * decides whether to OFFER the browser flow.
  *
- * Cursor would otherwise show every tool twice when the user already added
+ * Why the extension needs to know: on an lm host whose scheme is not listed
+ * (Positron "positron", Theia "theia", VSCodium Insiders "vscodium-insiders",
+ * unknown forks) the consent page refuses the request as "not from a supported
+ * editor", while the editor sits on a "Finishing sign-in…" notification for the
+ * full 30-minute wait. Those hosts are offered a pasted key instead. When the
+ * portal adds a scheme (an owner decision), add it here too.
+ */
+export const BROWSER_SIGNIN_SCHEMES: ReadonlySet<string> = new Set([
+  "vscode",
+  "vscode-insiders",
+  "cursor",
+  "vscodium",
+  "code-oss",
+  "windsurf",
+]);
+
+/** Whether the console's browser sign-in can return to an editor with this URI scheme. */
+export function canBrowserSignIn(uriScheme: string | undefined): boolean {
+  return BROWSER_SIGNIN_SCHEMES.has((uriScheme ?? "").trim().toLowerCase());
+}
+
+// ---- duplicate guard: is Mnemoverse already in a user's MCP config? ---------
+
+/** The hosted endpoint's host. Compared exactly, never as a substring. */
+const HOSTED_HOST = new URL(HOSTED_MCP_URL).hostname;
+
+/**
+ * The npm package as a launcher argument: the bare name or name@version/tag.
+ * Anchored: `@mnemoverse/mcp-memory-server-typo` or a path that merely contains
+ * the name does not match.
+ */
+const PACKAGE_SPEC = /^@mnemoverse\/mcp-memory-server(@[\w.^~-]+)?$/i;
+
+/**
+ * Package-runner flags that may precede the package without changing WHAT runs.
+ * Anything else (`--registry=…`, `-p other-pkg`, `--call`, …) could fetch or run
+ * something other than Mnemoverse's package, so the entry is not trusted.
+ */
+const HARMLESS_RUNNER_FLAGS: ReadonlySet<string> = new Set(["-y", "--yes", "-q", "--quiet", "--silent"]);
+
+/**
+ * Environment variables that redirect what npx installs or runs (a different
+ * registry, preloaded code). An entry that sets one is not counted as ours.
+ */
+const RUNNER_OVERRIDE_ENV = /^(npm_config_|node_options$|node_path$)/i;
+
+/**
+ * Return the name of an existing Mnemoverse server entry in an mcp.json-style
+ * file, or `undefined` if there is none (or the text is not readable JSON).
+ *
+ * WHY. Cursor would otherwise show every tool twice when the user already added
  * Mnemoverse by hand (docs, the Cursor plugin's snippet, `.cursor/mcp.json` in a
- * repo) and the extension registers it again. The file is user-edited, so the
+ * repo) and the extension registers it again; on config-file editors it tells
+ * the extension the user finished the setup. The file is user-edited, so the
  * parse tolerates JSONC: `//` and block comments and trailing commas — the
  * exact things a hand-edited file picks up. Anything still unparseable counts
  * as "no entry": a broken file must never block registration.
+ *
+ * EXACT MATCHING (security). Some of these files come from a cloned repository
+ * (`<workspace>/.cursor/mcp.json`). A match makes the extension skip its own
+ * registration and show the entry as the user's Mnemoverse setup, so a
+ * lookalike must never match: `https://mcp.mnemoverse.com.evil.example`,
+ * `https://evil.example/?ref=mcp.mnemoverse.com`, `@mnemoverse/mcp-memory-server-typo`
+ * and `bash -c "curl … # @mnemoverse/mcp-memory-server"` are all rejected.
+ * Accepted: an https URL whose host IS mcp.mnemoverse.com, or a standard
+ * package runner whose first positional argument IS the package (see
+ * `runsMnemoversePackage`). Entries with `"disabled": true` are skipped — the
+ * editor does not run them.
  */
 export function findMnemoverseServer(configText: string | undefined): string | undefined {
   const parsed = parseJsonc(configText);
   if (!isRecord(parsed)) {
     return undefined;
   }
-  // Cursor uses `mcpServers`; accept VS Code's `servers` too so a copied
-  // VS Code snippet is recognised.
+  // Cursor and most forks use `mcpServers`; accept VS Code's `servers` too so a
+  // copied VS Code snippet is recognised.
   for (const rootKey of ["mcpServers", "servers"]) {
     const servers = parsed[rootKey];
     if (!isRecord(servers)) {
       continue;
     }
     for (const [name, entry] of Object.entries(servers)) {
-      if (isRecord(entry) && entryPointsAtMnemoverse(entry)) {
+      if (isRecord(entry) && entry.disabled !== true && entryPointsAtMnemoverse(entry)) {
         return name;
       }
     }
@@ -279,18 +395,85 @@ export function findMnemoverseServer(configText: string | undefined): string | u
 
 function entryPointsAtMnemoverse(entry: Record<string, unknown>): boolean {
   for (const field of ["url", "serverUrl"]) {
-    const v = entry[field];
-    if (typeof v === "string" && v.toLowerCase().includes(HOSTED_MARKER)) {
+    if (isHostedUrl(entry[field])) {
       return true;
     }
   }
-  const command = entry.command;
-  if (typeof command === "string" && command.includes(PACKAGE_MARKER)) {
-    return true;
+  if (isRecord(entry.env) && Object.keys(entry.env).some((k) => RUNNER_OVERRIDE_ENV.test(k))) {
+    return false;
   }
-  const args = entry.args;
-  if (Array.isArray(args) && args.some((a) => typeof a === "string" && a.includes(PACKAGE_MARKER))) {
-    return true;
+  return runsMnemoversePackage(entry.command, entry.args);
+}
+
+/** An https URL whose host is exactly the hosted endpoint's host. */
+function isHostedUrl(value: unknown): boolean {
+  if (typeof value !== "string") {
+    return false;
+  }
+  try {
+    const u = new URL(value.trim());
+    return u.protocol === "https:" && u.hostname.toLowerCase() === HOSTED_HOST && u.username === "" && u.password === "";
+  } catch {
+    return false;
+  }
+}
+
+/** "npx", "npx.cmd", "/usr/local/bin/npx", "C:\\…\\npx.CMD" → "npx". */
+function executableName(command: string): string {
+  const base = command.trim().split(/[\\/]/).pop() ?? "";
+  return base.toLowerCase().replace(/\.(cmd|exe|bat)$/, "");
+}
+
+/**
+ * Whether `command` + `args` run Mnemoverse's npm package through a standard
+ * package runner, with nothing else in the way:
+ *
+ *   npx | pnpx | bunx  [harmless flags] @mnemoverse/mcp-memory-server[@ver] …
+ *   pnpm dlx | yarn dlx | bun x  (same)
+ *   cmd /c <one of the above>   (the usual Windows form)
+ *
+ * The package must be the FIRST positional argument: in `npx -y evil-pkg
+ * @mnemoverse/mcp-memory-server` npx runs evil-pkg, so that does not count.
+ * Free-form strings (a shell command line) are never scanned.
+ */
+function runsMnemoversePackage(command: unknown, args: unknown): boolean {
+  if (typeof command !== "string" || !Array.isArray(args) || !args.every((a) => typeof a === "string")) {
+    return false;
+  }
+  let rest = args as string[];
+  let runner = executableName(command);
+  if (runner === "cmd") {
+    if ((rest[0] ?? "").toLowerCase() !== "/c") {
+      return false;
+    }
+    runner = executableName(rest[1] ?? "");
+    rest = rest.slice(2);
+  }
+  switch (runner) {
+    case "npx":
+    case "pnpx":
+    case "bunx":
+      break;
+    case "pnpm":
+    case "yarn":
+      if (rest[0] !== "dlx") return false;
+      rest = rest.slice(1);
+      break;
+    case "bun":
+      if (rest[0] !== "x") return false;
+      rest = rest.slice(1);
+      break;
+    default:
+      return false;
+  }
+  for (const arg of rest) {
+    if (arg.startsWith("-")) {
+      if (!HARMLESS_RUNNER_FLAGS.has(arg)) {
+        return false;
+      }
+      continue;
+    }
+    return PACKAGE_SPEC.test(arg);
   }
   return false;
 }

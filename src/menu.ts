@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
-import { EDITORS_GUIDE_URL } from "./hosts";
+import { EDITORS_GUIDE_URL, canBrowserSignIn, mcpConfigTargetFor } from "./hosts";
+import { localDay } from "./rating-core";
 import { appName, describeState, getConnectionMode, getHost, hasKey } from "./state";
 import { openCursorMcpSettings } from "./cursor";
 import { explainGuidance } from "./guidance";
@@ -15,9 +16,20 @@ import { log } from "./log";
 /** Fully qualified walkthrough id: `<publisher>.<name>#<walkthrough id>`. */
 export const WALKTHROUGH_ID = "Mnemoverse.mnemoverse-vscode#mnemoverse.getStarted";
 
-/** The first memory the walkthrough suggests. Harmless, and easy to check in a new chat. */
-export const TRY_IT_PROMPT = "Remember that I prefer Railway for deployments.";
-const TRY_IT_FOLLOW_UP = "Where should I deploy this?";
+/**
+ * The first memory the walkthrough suggests. It must be TRUE: it goes into the
+ * user's permanent memory, shared with every connected tool, and the bundled
+ * skill tells agents to act on what they recall — there is no delete tool to
+ * take back a made-up preference (the earlier example, "I prefer Railway for
+ * deployments", would have steered every later deploy question). So the
+ * test fact is the setup itself: the editor and today's date (local calendar
+ * day, YYYY-MM-DD, from rating-core). An agent without memory cannot guess the
+ * answer to the follow-up, so a correct answer really shows recall.
+ */
+export function tryItPrompt(app: string, now = Date.now()): string {
+  return `Remember that I set up Mnemoverse memory in ${app} on ${localDay(now)}.`;
+}
+export const TRY_IT_FOLLOW_UP = "When and where did I set up Mnemoverse memory?";
 
 interface MenuItem extends vscode.QuickPickItem {
   run?: () => Thenable<unknown>;
@@ -41,11 +53,20 @@ export function buildMenuItems(): MenuItem[] {
         items.push(
           commandItem("$(server-process) Use local connection", "mnemoverse.useLocalConnection", "Run the server with npx on this machine; sign in with a key"),
         );
+        // The hosted connection doesn't use a stored key, but switching to it
+        // doesn't delete one either; let the user remove it from here.
+        if (hasKey()) {
+          items.push(
+            commandItem("$(trash) Remove stored key", "mnemoverse.clearApiKey", "The key kept for the local connection; the hosted connection doesn't use it"),
+          );
+        }
       } else {
         items.push(
           hasKey()
             ? commandItem("$(sign-out) Sign Out", "mnemoverse.signOut")
-            : commandItem("$(sign-in) Sign In", "mnemoverse.signIn", "Connect your memory through the browser"),
+            : canBrowserSignIn(vscode.env.uriScheme)
+              ? commandItem("$(sign-in) Sign In", "mnemoverse.signIn", "Connect your memory through the browser")
+              : commandItem("$(key) Set API Key", "mnemoverse.setApiKey", `Browser sign-in isn't available in ${appName()} yet; paste a key from the console`),
           commandItem("$(cloud) Use hosted connection", "mnemoverse.useHostedConnection", "No Node.js; the editor signs you in on first use"),
         );
       }
@@ -54,10 +75,12 @@ export function buildMenuItems(): MenuItem[] {
       items.push(commandItem("$(sign-in) Open MCP settings to sign in", "mnemoverse.openMcpSettings"));
       break;
     case "guidance":
-      items.push(
-        commandItem("$(clippy) Copy MCP config", "mnemoverse.copyMcpConfig", `For ${appName()}'s MCP config file`),
-        { label: "$(book) Open setup guide", run: () => vscode.env.openExternal(vscode.Uri.parse(EDITORS_GUIDE_URL)) },
-      );
+      // Where the editor's sign-in is refused today (Antigravity), a config
+      // entry cannot connect yet; lead with the guide, which has the status.
+      if (mcpConfigTargetFor(host.id).signIn !== "not-accepted") {
+        items.push(commandItem("$(clippy) Copy MCP config", "mnemoverse.copyMcpConfig", `For ${appName()}'s MCP config file`));
+      }
+      items.push({ label: "$(book) Open setup guide", run: () => vscode.env.openExternal(vscode.Uri.parse(EDITORS_GUIDE_URL)) });
       break;
   }
   items.push(
@@ -107,10 +130,12 @@ export async function openGetStarted(): Promise<void> {
  * steps are shown with a "Copy prompt" button.
  */
 export async function tryIt(): Promise<void> {
+  const app = appName();
+  const prompt = tryItPrompt(app);
   if (getHost().kind === "lm") {
     try {
       await vscode.commands.executeCommand("workbench.action.chat.open", {
-        query: TRY_IT_PROMPT,
+        query: prompt,
         isPartialQuery: true,
         mode: "agent",
       });
@@ -125,11 +150,11 @@ export async function tryIt(): Promise<void> {
     }
   }
   const choice = await vscode.window.showInformationMessage(
-    `Open the agent chat in ${appName()} and send: "${TRY_IT_PROMPT}" Then start a new chat and ask "${TRY_IT_FOLLOW_UP}" — the agent should recall Railway.`,
+    `Open the agent chat in ${app} and send: "${prompt}" Then start a new chat and ask "${TRY_IT_FOLLOW_UP}" If the agent answers with that date and ${app}, memory is working.`,
     "Copy prompt",
   );
   if (choice === "Copy prompt") {
-    await vscode.env.clipboard.writeText(TRY_IT_PROMPT);
+    await vscode.env.clipboard.writeText(prompt);
   }
 }
 

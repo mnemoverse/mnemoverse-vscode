@@ -1,9 +1,10 @@
 import * as vscode from "vscode";
-import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { HOSTED_MCP_URL, findMnemoverseServer } from "./hosts";
-import { isAlreadyConfigured } from "./state";
+import { HOSTED_MCP_URL } from "./hosts";
+import { CONSOLE_BASE_URL } from "./signin-core";
+import { getConfiguredEntry } from "./state";
+import { findMnemoverseEntry, type ConfigFileRef, type FoundEntry } from "./config-files";
 import { noteOnboardingToast } from "./session";
 import { log } from "./log";
 
@@ -63,13 +64,15 @@ function cursorMcpApi(): CursorMcpApi | undefined {
 
 /**
  * The MCP config files Cursor reads: the global ~/.cursor/mcp.json and each
- * open workspace folder's .cursor/mcp.json (local folders only).
+ * open workspace folder's .cursor/mcp.json (local folders only). Workspace
+ * files come from whatever repository is open, so they are read with the
+ * stricter rules in config-files.ts (no symlinks).
  */
-function cursorConfigFiles(): string[] {
-  const files = [path.join(os.homedir(), ".cursor", "mcp.json")];
+function cursorConfigFiles(): ConfigFileRef[] {
+  const files: ConfigFileRef[] = [{ file: path.join(os.homedir(), ".cursor", "mcp.json") }];
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
     if (folder.uri.scheme === "file") {
-      files.push(path.join(folder.uri.fsPath, ".cursor", "mcp.json"));
+      files.push({ file: path.join(folder.uri.fsPath, ".cursor", "mcp.json"), fromWorkspace: true });
     }
   }
   return files;
@@ -77,33 +80,21 @@ function cursorConfigFiles(): string[] {
 
 /**
  * Look for a Mnemoverse entry the user already has in a Cursor MCP config.
- * READ-ONLY: this version never writes any config file. A missing, unreadable
- * or invalid file counts as "no entry".
- *
- * Returns a short description for the log ("<file> (server "<name>")"), or
- * `undefined`.
+ * READ-ONLY: this version never writes any config file. A missing, unreadable,
+ * oversized, special (FIFO, device) or invalid file counts as "no entry", and
+ * only an exact match counts (see findMnemoverseServer).
  */
-export async function findExistingCursorEntry(): Promise<string | undefined> {
-  for (const file of cursorConfigFiles()) {
-    let text: string;
-    try {
-      text = await fs.readFile(file, "utf8");
-    } catch {
-      continue; // missing or unreadable: nothing to duplicate
-    }
-    const name = findMnemoverseServer(text);
-    if (name !== undefined) {
-      return `${file} (server "${name}")`;
-    }
-  }
-  return undefined;
+export async function findExistingCursorEntry(): Promise<FoundEntry | undefined> {
+  return findMnemoverseEntry(cursorConfigFiles(), (file, reason) =>
+    log.warn(`Cursor: skipped ${file} while looking for an existing Mnemoverse entry (${reason})`),
+  );
 }
 
 export interface CursorStartResult {
   /** Cursor will offer Mnemoverse to its agent (registered now, or configured by the user). */
   registered: boolean;
   /** Found in the user's own config; the extension added nothing. */
-  alreadyConfigured: boolean;
+  configuredIn?: FoundEntry;
 }
 
 /**
@@ -124,8 +115,10 @@ export interface CursorStartResult {
 export async function startCursorAdapter(): Promise<CursorStartResult> {
   const existing = await findExistingCursorEntry();
   if (existing) {
-    log.info(`Cursor: Mnemoverse is already configured in ${existing}; not registering a second copy`);
-    return { registered: true, alreadyConfigured: true };
+    log.info(
+      `Cursor: Mnemoverse is already configured in ${existing.file} (server "${existing.server}"); not registering a second copy`,
+    );
+    return { registered: true, configuredIn: existing };
   }
   const api = cursorMcpApi();
   if (!api) {
@@ -134,14 +127,20 @@ export async function startCursorAdapter(): Promise<CursorStartResult> {
   // No `headers`: Cursor drops them, and the hosted server wants its own OAuth token.
   await Promise.resolve(api.registerServer({ name: CURSOR_SERVER_NAME, server: { url: HOSTED_MCP_URL } }));
   log.info(`Cursor: registered ${HOSTED_MCP_URL} as "${CURSOR_LISTED_NAME}"`);
-  return { registered: true, alreadyConfigured: false };
+  return { registered: true };
+}
+
+/**
+ * How Cursor lists the Mnemoverse server this user has: ours
+ * ("extension-mnemoverse"), or the entry from their own config, by name.
+ */
+function listedServerName(): string {
+  return getConfiguredEntry()?.server ?? CURSOR_LISTED_NAME;
 }
 
 /** The sign-in steps in words, for when no settings command can be found. */
 export function cursorSignInSteps(): string {
-  return isAlreadyConfigured()
-    ? "Open Cursor Settings → Tools & MCPs and click Connect (or Login) next to your Mnemoverse server."
-    : `Open Cursor Settings → Tools & MCPs and click Connect (or Login) next to "${CURSOR_LISTED_NAME}". Cursor opens the browser to sign you in.`;
+  return `Open Cursor Settings → Tools & MCPs and click Connect (or Login) next to "${listedServerName()}". Cursor opens the browser to sign you in.`;
 }
 
 /**
@@ -202,19 +201,45 @@ export async function explainCursorSignIn(): Promise<void> {
 }
 
 /**
- * Set API Key in Cursor: still allowed (the key is harmless and a user may
- * share settings with another editor), but explain first that Cursor does not
- * use it. Returns true if the user still wants to paste a key.
+ * Sign Out in Cursor. The sign-in Cursor's agent uses is Cursor's own OAuth
+ * session for the server; this extension never held it and cannot end it
+ * through a documented API. (`unregisterServer` would clear it as a side
+ * effect in Cursor 3.21, but that is undocumented behaviour and would also
+ * remove the server.) So say plainly where the real sign-out is, instead of
+ * reporting "signed out" while memory keeps working.
+ *
+ * `removedKey`: the caller already deleted a key this extension had stored
+ * (0.2.x minted one in Cursor too, and Cursor never used it). It stays valid on
+ * the server, so the console link is offered.
  */
-export async function confirmSetKeyInCursor(): Promise<boolean> {
+export async function explainCursorSignOut(removedKey: boolean): Promise<void> {
+  const keyNote = removedKey
+    ? " The unused key this extension had stored was removed from this device; it stays valid until you revoke it in the console."
+    : "";
+  const buttons = removedKey ? ["Open MCP settings", "Open console"] : ["Open MCP settings"];
   const choice = await vscode.window.showInformationMessage(
-    "In Cursor, memory connects through Cursor's own sign-in (Cursor Settings → Tools & MCPs). A key set here is only used by the local server this extension runs in VS Code-style editors; Cursor does not run that server through this extension.",
-    "Open MCP settings",
-    "Set key anyway",
+    `Cursor holds the Mnemoverse sign-in, not this extension. To sign out, open Cursor Settings → Tools & MCPs and click Logout next to "${listedServerName()}".${keyNote}`,
+    ...buttons,
   );
   if (choice === "Open MCP settings") {
     await openCursorMcpSettings();
-    return false;
+  } else if (choice === "Open console") {
+    await vscode.env.openExternal(vscode.Uri.parse(CONSOLE_BASE_URL));
   }
-  return choice === "Set key anyway";
+}
+
+/**
+ * Set API Key in Cursor: nothing in Cursor would read the key. SecretStorage
+ * belongs to each application, so a key saved here is not visible to VS Code
+ * either — storing it would only suggest that something changed. Explain
+ * Cursor's sign-in instead and store nothing.
+ */
+export async function explainKeyNotUsedInCursor(): Promise<void> {
+  const choice = await vscode.window.showInformationMessage(
+    "Cursor doesn't use a Mnemoverse API key: memory connects through Cursor's own sign-in (Cursor Settings → Tools & MCPs). Nothing was saved.",
+    "Open MCP settings",
+  );
+  if (choice === "Open MCP settings") {
+    await openCursorMcpSettings();
+  }
 }

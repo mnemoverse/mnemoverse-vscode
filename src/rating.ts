@@ -9,7 +9,7 @@ import {
   shouldAskForRating,
   type RatingState,
 } from "./rating-core";
-import { appName, isConnected } from "./state";
+import { appName, isKnownSetUp } from "./state";
 import { hadOnboardingToastThisSession } from "./session";
 import { log } from "./log";
 
@@ -66,7 +66,10 @@ export async function maybeAskForRating(context: vscode.ExtensionContext, now = 
     return false;
   }
   const state = readState(context);
-  if (!shouldAskForRating(state, { connected: isConnected(), now })) {
+  // isKnownSetUp, not isConnected: a Cursor registration nobody signed in to
+  // counts as "connected" for the agent, but memory may never have worked for
+  // this user, and they are the last person to ask for a rating.
+  if (!shouldAskForRating(state, { connected: isKnownSetUp(), now })) {
     return false;
   }
   askedThisSession = true;

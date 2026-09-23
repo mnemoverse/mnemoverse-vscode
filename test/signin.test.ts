@@ -147,10 +147,28 @@ describe("full keyless sign-in", () => {
     expect(vscode.__state.messages.some((m) => m.message.includes("expired"))).toBe(false);
   });
 
-  it("without npx, reports the sign-in but not 'connected', and offers the Node fixes", async () => {
+  it("without npx, Sign In says so BEFORE the browser opens, and offers the hosted connection", async () => {
+    const { vscode } = await activate();
+    process.env.PATH = tempDir("mnemoverse-empty-");
+    vscode.__setResponder(() => undefined); // dismiss
+    await vscode.commands.executeCommand("mnemoverse.signIn");
+    expect(vscode.__state.opened).toEqual([]); // no key minted for a server that can't start
+    const notice = vscode.__state.messages[0];
+    expect(notice.level).toBe("warning");
+    expect(notice.message).toContain("npx was not found on PATH");
+    expect(notice.items).toEqual(["Use hosted connection", "Install Node.js", "Sign in anyway"]);
+
+    vscode.__setResponder((m) => (m.items.includes("Use hosted connection") ? "Use hosted connection" : undefined));
+    await vscode.commands.executeCommand("mnemoverse.signIn");
+    expect(vscode.__state.opened).toEqual([]);
+    expect(vscode.__state.config.get("mnemoverse.connection")).toBe("hosted");
+  });
+
+  it("without npx, 'Sign in anyway' signs in but never reports or shows 'connected'", async () => {
     stubExchange();
     const { vscode } = await activate();
     process.env.PATH = tempDir("mnemoverse-empty-");
+    vscode.__setResponder((m) => (m.items.includes("Sign in anyway") ? "Sign in anyway" : undefined));
     const run = vscode.commands.executeCommand("mnemoverse.signIn");
     await waitFor(() => vscode.__state.opened.length > 0);
     const state = new URL(vscode.__state.opened[0]).searchParams.get("state")!;
@@ -161,6 +179,64 @@ describe("full keyless sign-in", () => {
     expect(texts).toContain("Signed in to Mnemoverse as dev@example.com.");
     expect(texts.some((t) => t.includes("connected"))).toBe(false);
     expect(vscode.__state.messages.some((m) => m.items.includes("Use hosted connection"))).toBe(true);
+    // The shared state agrees with the toast: not connected, and the tooltip says why.
+    expect(vscode.__state.context.get("mnemoverse.connected")).toBe(false);
+    const tooltip = String(vscode.__state.statusItems[0].tooltip);
+    expect(tooltip).toContain("Node.js needed");
+    expect(tooltip).not.toContain("Connected");
+  });
+
+  it("a superseded attempt's late approval stays silent once the newer attempt signed in", async () => {
+    stubExchange();
+    const { vscode, ctx } = await activate();
+    const runA = vscode.commands.executeCommand("mnemoverse.signIn");
+    await waitFor(() => vscode.__state.opened.length === 1);
+    const stateA = new URL(vscode.__state.opened[0]).searchParams.get("state")!;
+    const runB = vscode.commands.executeCommand("mnemoverse.signIn"); // supersedes A
+    await waitFor(() => vscode.__state.opened.length === 2);
+    const stateB = new URL(vscode.__state.opened[1]).searchParams.get("state")!;
+    await runA;
+    await vscode.__state.uriHandlers[0].handleUri(vscode.Uri.parse(`${CALLBACK}?code=b&state=${stateB}`));
+    await runB;
+    await flush();
+    expect(ctx.__secrets.get("mnemoverse.apiKey")).toBe("mk_live_minted");
+
+    vscode.__state.messages.length = 0;
+    await vscode.__state.uriHandlers[0].handleUri(vscode.Uri.parse(`${CALLBACK}?code=a&state=${stateA}`));
+    await flush();
+    expect(vscode.__state.messages).toHaveLength(0); // no "run Sign In again": they are signed in
+  });
+
+  it("a timed-out attempt's late approval gets the notice, unless a later attempt signed in", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    stubExchange();
+    const { vscode } = await activate();
+    const runA = vscode.commands.executeCommand("mnemoverse.signIn");
+    await waitFor(() => vscode.__state.opened.length === 1);
+    const stateA = new URL(vscode.__state.opened[0]).searchParams.get("state")!;
+    await vi.advanceTimersByTimeAsync(30 * 60 * 1000 + 10);
+    await runA;
+    await flush();
+
+    vscode.__state.messages.length = 0;
+    const lateA = vscode.Uri.parse(`${CALLBACK}?code=a&state=${stateA}`);
+    await vscode.__state.uriHandlers[0].handleUri(lateA);
+    await flush();
+    expect(vscode.__state.messages.map((m) => m.message)).toEqual([
+      "This sign-in finished after the request expired — run Sign In again.",
+    ]);
+
+    // Sign in successfully with a new attempt; A's approval arriving again is now moot.
+    const runB = vscode.commands.executeCommand("mnemoverse.signIn");
+    await waitFor(() => vscode.__state.opened.length === 2);
+    const stateB = new URL(vscode.__state.opened[1]).searchParams.get("state")!;
+    await vscode.__state.uriHandlers[0].handleUri(vscode.Uri.parse(`${CALLBACK}?code=b&state=${stateB}`));
+    await runB;
+    await flush();
+    vscode.__state.messages.length = 0;
+    await vscode.__state.uriHandlers[0].handleUri(lateA);
+    await flush();
+    expect(vscode.__state.messages).toHaveLength(0);
   });
 });
 

@@ -163,6 +163,14 @@
     "menus": {
       "commandPalette": [
         {
+          "command": "mnemoverse.setApiKey",
+          "when": "!mnemoverse.host || mnemoverse.host == lm"
+        },
+        {
+          "command": "mnemoverse.clearApiKey",
+          "when": "!mnemoverse.host || mnemoverse.host == lm"
+        },
+        {
           "command": "mnemoverse.useHostedConnection",
           "when": "mnemoverse.host == lm && config.mnemoverse.connection != hosted"
         },
@@ -183,7 +191,7 @@
           ],
           "enumDescriptions": [
             "Run the memory server on this machine with npx (needs Node.js 18+). Connect with \"Mnemoverse: Sign In\"; the key is kept in the OS keychain.",
-            "Use the hosted server at https://mcp.mnemoverse.com/mcp. The editor signs you in through the browser the first time the agent uses memory. No Node.js and no stored key."
+            "Use the hosted server at https://mcp.mnemoverse.com/mcp. The editor signs you in through the browser the first time the agent uses memory. No Node.js, and no key is needed."
           ],
           "default": "local",
           "scope": "application",
@@ -205,7 +213,7 @@
           {
             "id": "connect.lm",
             "title": "Connect your memory",
-            "description": "Sign in through the browser; there is no key to copy. The agent in this editor then gets long-term memory tools.\n[Sign In](command:mnemoverse.signIn)\nNo Node.js on this machine? [Use the hosted connection](command:mnemoverse.useHostedConnection) instead.",
+            "description": "Sign in through the browser; there is no key to copy. The agent in this editor then gets long-term memory tools.\n[Sign In](command:mnemoverse.signIn)\nNo Node.js on this machine? [Use the hosted connection](command:mnemoverse.useHostedConnection) instead.\nPositron, Theia and VSCodium Insiders can't use the browser sign-in yet: [paste a key](command:mnemoverse.setApiKey) from the console instead.",
             "media": {
               "markdown": "media/walkthrough/connect-lm.md"
             },
@@ -229,7 +237,7 @@
           {
             "id": "connect.guidance",
             "title": "Add Mnemoverse to your editor's MCP config",
-            "description": "This editor doesn't let extensions add MCP servers yet. Copy a ready config for Mnemoverse's hosted server and paste it into the editor's MCP config file.\n[Copy config](command:mnemoverse.copyMcpConfig)",
+            "description": "The extension can't add Mnemoverse to this editor's agent by itself (\"Mnemoverse: Show Log\" says why). Copy a ready config for Mnemoverse's hosted server and paste it into the editor's MCP config file.\n[Copy config](command:mnemoverse.copyMcpConfig)",
             "media": {
               "markdown": "media/walkthrough/connect-guidance.md"
             },
@@ -241,7 +249,7 @@
           {
             "id": "tryIt",
             "title": "Try it",
-            "description": "Ask the agent to remember something, then ask about it in a new chat.\n[Try it](command:mnemoverse.tryIt)",
+            "description": "Ask the agent to remember when and where you set up memory, then ask about it in a new chat.\n[Try it](command:mnemoverse.tryIt)",
             "media": {
               "markdown": "media/walkthrough/try-it.md"
             },

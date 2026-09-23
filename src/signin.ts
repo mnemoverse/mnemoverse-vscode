@@ -9,12 +9,14 @@ import {
   parseCallback,
   parseExchangeResponse,
   EXCHANGE_URL,
+  CONSOLE_BASE_URL,
   type ExchangeResponse,
 } from "./signin-core";
 import { storeApiKey, clearApiKey } from "./auth";
 import { resetConnectPrompt } from "./session";
 import { appName, isRegistered } from "./state";
-import { isNpxAvailable, promptNodeMissing } from "./node-check";
+import { canBrowserSignIn } from "./hosts";
+import { confirmSignInWithoutNode, isNpxAvailable, promptNodeMissing } from "./node-check";
 import { log } from "./log";
 
 /**
@@ -27,9 +29,9 @@ import { log } from "./log";
  * with the portal). This module is the VS Code-aware orchestration.
  */
 
-type Outcome =
-  | { ok: true; email: string }
-  | { ok: false; reason: "cancelled" | "denied" | "timeout" | "superseded" | "exchange"; detail?: string };
+type FailureReason = "cancelled" | "denied" | "timeout" | "superseded" | "exchange";
+
+type Outcome = { ok: true; email: string } | { ok: false; reason: FailureReason; detail?: string };
 
 interface Pending {
   state: string;
@@ -57,22 +59,63 @@ let pending: Pending | undefined;
 export const TIMEOUT_MS = 30 * 60 * 1000;
 
 /** The console, where keys are listed and revoked. */
-const CONSOLE_URL = "https://console.mnemoverse.com";
+const CONSOLE_URL = CONSOLE_BASE_URL;
 
 /** True while the "sign-in expired" notice is on screen, so repeated URIs can't stack toasts. */
 let lateNoticeOpen = false;
 
 /**
- * States of attempts that already signed in this session. A browser or OS that
- * delivers the same callback URI twice must not follow a success with a
- * "sign-in expired" notice.
+ * How each attempt started in this session ended, by its `state`, in the
+ * order they ended ("done" = signed in). A callback that arrives when nothing
+ * is pending is judged against this:
+ *
+ *   - "done"                    → the same URI delivered twice (some browsers
+ *                                 and OSes do): stay silent after a success.
+ *   - "superseded"              → the user clicked Sign In again and finished
+ *                                 the newer attempt; the old tab's approval is
+ *                                 moot. Telling them to "run Sign In again"
+ *                                 would mint yet another key.
+ *   - ended before a later "done" → same: they are signed in already.
+ *   - "timeout" / "cancelled", or unknown (the editor restarted, dropping the
+ *     PKCE verifier) → the approval really arrived too late: say so.
+ *
+ * Bounded: only the most recent attempts are kept.
  */
-const completedStates = new Set<string>();
+const attemptEnds = new Map<string, "done" | FailureReason>();
+const MAX_REMEMBERED_ATTEMPTS = 50;
+
+function recordAttemptEnd(state: string, end: "done" | FailureReason): void {
+  attemptEnds.delete(state); // re-insert so the map stays in end order
+  attemptEnds.set(state, end);
+  while (attemptEnds.size > MAX_REMEMBERED_ATTEMPTS) {
+    const oldest = attemptEnds.keys().next().value as string;
+    attemptEnds.delete(oldest);
+  }
+}
+
+/** Whether a late callback for `state` deserves the "request expired" notice. */
+function isLateButLive(state: string): boolean {
+  const end = attemptEnds.get(state);
+  if (end === undefined) {
+    return true; // started before a restart, or long forgotten
+  }
+  if (end !== "timeout" && end !== "cancelled") {
+    return false;
+  }
+  // Signed in by a later attempt since this one ended?
+  let seen = false;
+  for (const [s, e] of attemptEnds) {
+    if (s === state) seen = true;
+    else if (seen && e === "done") return false;
+  }
+  return true;
+}
 
 /**
  * Name for the key the console mints, shown in the console's key list. Uses
- * the editor's own name ("Cursor — host — date", "VSCodium — …") rather than a
- * hard-coded "VS Code", so a user with several editors can tell keys apart.
+ * the editor's own name ("VSCodium — host — date", "Visual Studio Code — …")
+ * rather than a hard-coded "VS Code", so a user with several editors can tell
+ * keys apart.
  */
 function defaultKeyName(): string {
   const host = (() => {
@@ -86,6 +129,48 @@ function defaultKeyName(): string {
   return `${appName()} — ${host} — ${date}`;
 }
 
+/**
+ * `mnemoverse.signIn` on the local connection: the checks that must come
+ * BEFORE the browser opens, then the flow itself.
+ *
+ *   1. The console must accept this editor's URI scheme as the way back
+ *      (hosts.ts BROWSER_SIGNIN_SCHEMES). Otherwise the consent page refuses the
+ *      request and the editor waits the full timeout; offer a pasted key.
+ *   2. npx must be on PATH, or the user must say to go ahead anyway: a key
+ *      minted for a local server that cannot start is a key orphaned in the
+ *      console once they switch to the hosted connection (which doesn't use it).
+ */
+export async function signInLocal(
+  context: vscode.ExtensionContext,
+  fireServerChanged: () => void,
+): Promise<void> {
+  if (!canBrowserSignIn(vscode.env.uriScheme)) {
+    log.info(`Browser sign-in is not accepted for uriScheme "${vscode.env.uriScheme}"; offering a pasted key`);
+    await explainNoBrowserSignIn();
+    return;
+  }
+  if (!isNpxAvailable() && !(await confirmSignInWithoutNode())) {
+    return;
+  }
+  await signIn(context, fireServerChanged);
+}
+
+/** Sign In where the console cannot hand the code back to this editor. */
+async function explainNoBrowserSignIn(): Promise<void> {
+  const app = appName();
+  const choice = await vscode.window.showInformationMessage(
+    `Browser sign-in isn't available in ${app} yet. Create a key in the console, then paste it with "Set API Key".`,
+    "Open console",
+    "Set API Key",
+  );
+  if (choice === "Open console") {
+    await vscode.env.openExternal(vscode.Uri.parse(CONSOLE_URL));
+  } else if (choice === "Set API Key") {
+    await vscode.commands.executeCommand("mnemoverse.setApiKey");
+  }
+}
+
+/** The browser flow itself (no pre-checks; see `signInLocal`). */
 export async function signIn(
   context: vscode.ExtensionContext,
   fireServerChanged: () => void,
@@ -121,6 +206,7 @@ export async function signIn(
     done = true;
     clearTimeout(timer);
     if (pending && pending.state === state) pending = undefined;
+    recordAttemptEnd(state, o.ok ? "done" : o.reason);
     resolveOutcome(o);
   };
   const timer = setTimeout(() => settle({ ok: false, reason: "timeout" }), TIMEOUT_MS);
@@ -159,19 +245,19 @@ export async function signIn(
  */
 export async function handleUri(uri: vscode.Uri): Promise<void> {
   const result = parseCallback(uri.query);
-  if (
-    !pending &&
-    result.kind === "code" &&
-    isWellFormedState(result.state) &&
-    !completedStates.has(result.state)
-  ) {
-    // A well-formed callback with nothing waiting for it: almost always the
-    // user approving in the browser after this editor's wait expired (or after
-    // a restart, which drops the in-memory PKCE verifier). The code cannot be
-    // redeemed without that verifier, so say so and offer a fresh start
-    // instead of dropping it silently. Nothing from the URI is used or logged.
-    log.warn("A sign-in callback arrived with no sign-in in progress (expired or from an earlier session)");
-    void showLateCallbackNotice();
+  if (!pending && result.kind === "code" && isWellFormedState(result.state)) {
+    // A well-formed callback with nothing waiting for it. When the user
+    // approved after this editor's wait expired (or after a restart, which
+    // drops the in-memory PKCE verifier), the code cannot be redeemed, so say
+    // so and offer a fresh start instead of dropping it silently. When the
+    // attempt was superseded or the user is signed in already, stay quiet (see
+    // attemptEnds). Nothing from the URI is used or logged.
+    if (isLateButLive(result.state)) {
+      log.warn("A sign-in callback arrived with no sign-in in progress (expired or from an earlier session)");
+      void showLateCallbackNotice();
+    } else {
+      log.info("Ignoring a sign-in callback for an attempt that was replaced or already completed");
+    }
     return;
   }
   if (!pending || result.kind === "invalid" || result.state !== pending.state) {
@@ -201,7 +287,6 @@ async function redeemCode(p: Pending, code: string): Promise<void> {
     // replaced) — do NOT store a key for an attempt the user abandoned.
     if (pending !== p) return;
     await storeApiKey(p.context, data.api_key);
-    completedStates.add(p.state);
     p.fireServerChanged(); // make VS Code re-resolve + respawn the MCP server with the new key
     p.settle({ ok: true, email: data.email });
   } catch (err) {
@@ -265,7 +350,11 @@ async function showLateCallbackNotice(): Promise<void> {
 }
 
 /**
- * Sign out on this device: forget the stored key and stop the server using it.
+ * Sign out on this device, for the LOCAL connection only: forget the stored key
+ * and stop the server using it. (On the hosted connection, in Cursor and on
+ * config-file editors the sign-in in use is the editor's own OAuth session;
+ * extension.ts routes Sign Out there to an explanation instead, because
+ * clearing the key would change nothing and "Signed out" would be false.)
  *
  * The key itself stays valid on the server — there is no self-revoke endpoint
  * yet — so the message says so and links the console where it can be revoked.

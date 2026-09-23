@@ -1,17 +1,28 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { fakeNodeBin, flush, load } from "./helpers";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { fakeNodeBin, flush, load, tempDir } from "./helpers";
 
 const DAY = 24 * 60 * 60 * 1000;
 
 let savedPath: string | undefined;
+let savedHome: string | undefined;
+let home: string;
 beforeEach(() => {
   savedPath = process.env.PATH;
+  savedHome = process.env.HOME;
   process.env.PATH = fakeNodeBin();
+  // The Cursor and config-file adapters read MCP configs under HOME: never the developer's own.
+  home = tempDir("mnemoverse-home-");
+  process.env.HOME = home;
 });
 afterEach(() => {
   process.env.PATH = savedPath;
+  process.env.HOME = savedHome;
   vi.useRealTimers();
 });
+
+const VETERAN_RATING = { firstSeen: Date.now() - 10 * DAY, activeDays: 5, lastActiveDay: "2000-01-01", askCount: 0, neverAsk: false };
 
 /** A connected long-time user: installed 10 days ago, 5 active days, welcome already seen. */
 async function veteran(appName = "Visual Studio Code", uriScheme = "vscode", extra: Record<string, unknown> = {}) {
@@ -20,7 +31,7 @@ async function veteran(appName = "Visual Studio Code", uriScheme = "vscode", ext
   const ctx = vscode.__makeContext({
     globalState: {
       "mnemoverse.welcomeShown": true,
-      "mnemoverse.rating": { firstSeen: Date.now() - 10 * DAY, activeDays: 5, lastActiveDay: "2000-01-01", askCount: 0, neverAsk: false },
+      "mnemoverse.rating": VETERAN_RATING,
       ...extra,
     },
   });
@@ -72,6 +83,45 @@ describe("rating prompt (glue)", () => {
     await ext.activate(ctx as never);
     const rating = await import("../src/rating");
     expect(await rating.maybeAskForRating(ctx as never)).toBe(false);
+  });
+
+  it("Cursor: never asks when the extension only added its server (Cursor's sign-in is invisible to us)", async () => {
+    const { vscode, ext } = await load();
+    vscode.__setHost({
+      appName: "Cursor",
+      uriScheme: "cursor",
+      lm: "stub",
+      cursor: { mcp: { registerServer: vi.fn(), unregisterServer: vi.fn() } },
+    });
+    const ctx = vscode.__makeContext({
+      globalState: { "mnemoverse.cursorIntroShown": true, "mnemoverse.rating": VETERAN_RATING },
+    });
+    await ext.activate(ctx as never);
+    await flush();
+    const rating = await import("../src/rating");
+    expect(vscode.__state.context.get("mnemoverse.connected")).toBe(true); // offered to the agent...
+    expect(await rating.maybeAskForRating(ctx as never)).toBe(false); // ...but not known to work
+  });
+
+  it("Cursor: asks when the user's own ~/.cursor/mcp.json has Mnemoverse", async () => {
+    fs.mkdirSync(path.join(home, ".cursor"));
+    fs.writeFileSync(
+      path.join(home, ".cursor", "mcp.json"),
+      JSON.stringify({ mcpServers: { mnemoverse: { command: "npx", args: ["-y", "@mnemoverse/mcp-memory-server@latest"], env: {} } } }),
+    );
+    const { vscode, ext } = await load();
+    vscode.__setHost({
+      appName: "Cursor",
+      uriScheme: "cursor",
+      lm: "stub",
+      cursor: { mcp: { registerServer: vi.fn(), unregisterServer: vi.fn() } },
+    });
+    const ctx = vscode.__makeContext({ globalState: { "mnemoverse.rating": VETERAN_RATING } });
+    await ext.activate(ctx as never);
+    await flush();
+    const rating = await import("../src/rating");
+    expect(await rating.maybeAskForRating(ctx as never)).toBe(true);
+    expect(vscode.__state.messages.at(-1)!.message).toContain("A rating on Open VSX");
   });
 
   it("fires from the ~3-minute timer after activation, and the timer dies with the extension", async () => {

@@ -1,25 +1,46 @@
 import * as vscode from "vscode";
 import type { HostId, HostKind } from "./hosts";
+import { mcpConfigTargetFor } from "./hosts";
 import { peekApiKey } from "./auth";
+import { isNpxAvailable } from "./node-check";
+import { displayPath, type FoundEntry } from "./config-files";
 import { log } from "./log";
 
 /**
  * What the extension has actually managed to do in this editor, and the one
  * place that turns it into user-visible state: the `mnemoverse.host` and
- * `mnemoverse.connected` context keys (walkthrough steps and palette `when`
- * clauses read them) and the status bar item.
+ * `mnemoverse.connected` context keys (walkthrough steps, palette `when`
+ * clauses and the chat skill read them) and the status bar item.
  *
  * WHY A SINGLE SOURCE. Before 0.3.0 the extension said "memory connected"
  * after any successful sign-in — including in Cursor, where the MCP provider
- * API is a no-op stub and nothing was ever registered. "Connected" now has one
- * definition, computed here from facts the adapters report:
+ * API is a no-op stub and nothing was ever registered. The states are now
+ * computed here, from facts the adapters report, and nowhere else.
  *
- *   - lm, local  → the provider registered AND a key is stored.
- *   - lm, hosted → the provider registered (the editor runs its own OAuth on
- *                  first use; we cannot see that result, so we do not wait on it).
+ * Two questions, answered separately because they differ:
+ *
+ * `isConnected()` — "the editor's agent has the Mnemoverse server, and nothing
+ * more is needed from THIS extension" (the `mnemoverse.connected` key):
+ *
+ *   - lm, local  → the provider registered AND a key is stored AND npx is on
+ *                  PATH (without Node every server start fails, so a stored key
+ *                  alone is not a connection).
+ *   - lm, hosted → the provider registered; the editor runs its own OAuth on
+ *                  first use.
  *   - cursor     → Cursor accepted our registration, or the user's Cursor config
- *                  already had a Mnemoverse entry.
+ *                  already had a Mnemoverse entry; Cursor runs the sign-in.
  *   - guidance   → never: nothing is registered on this host.
+ *
+ * `isKnownSetUp()` — "memory is known to be set up, not merely offered", for
+ * the rating prompt, which must not reach someone for whom memory never
+ * worked. It drops the cases where the extension only put a server in front of
+ * the editor's own, invisible sign-in: a Cursor registration nobody may have
+ * logged in to. It keeps lm (a key was minted, or the user chose the hosted
+ * connection on purpose) and any entry the user added to a config file by hand.
+ *
+ * The user-visible labels never say "Connected" for a server the extension did
+ * not register and cannot see signed in: those read "Added to <editor>" or
+ * "In your MCP config".
  *
  * Module-level like session.ts: the state lives exactly as long as the
  * extension host session.
@@ -44,8 +65,12 @@ interface Snapshot {
   host: HostInfo;
   /** The adapter registered something the editor will use. */
   registered: boolean;
-  /** Cursor only: an existing entry in the user's Cursor config was found, so nothing was added. */
-  alreadyConfigured: boolean;
+  /**
+   * A Mnemoverse entry the user already has in the editor's own MCP config
+   * (Cursor: then the extension registered nothing; config-file editors: the
+   * user finished the setup). Read-only discovery, never written.
+   */
+  configuredIn: FoundEntry | undefined;
   /** A key is stored in SecretStorage (only meaningful for lm + local). */
   hasKey: boolean;
 }
@@ -55,7 +80,7 @@ let snap: Snapshot = {
   // registered, nothing claimed.
   host: { id: "unknown", kind: "guidance", appName: "" },
   registered: false,
-  alreadyConfigured: false,
+  configuredIn: undefined,
   hasKey: false,
 };
 
@@ -81,9 +106,9 @@ export function setHost(host: HostInfo): void {
   publish();
 }
 
-/** Record what the adapter achieved. */
-export function setRegistered(registered: boolean, alreadyConfigured = false): void {
-  snap = { ...snap, registered, alreadyConfigured };
+/** Record what the adapter achieved, and any entry found in the user's own config. */
+export function setRegistered(registered: boolean, configuredIn?: FoundEntry): void {
+  snap = { ...snap, registered, configuredIn };
   publish();
 }
 
@@ -91,8 +116,14 @@ export function isRegistered(): boolean {
   return snap.registered;
 }
 
+/** Whether the user's own MCP config already has Mnemoverse (see `configuredIn`). */
 export function isAlreadyConfigured(): boolean {
-  return snap.alreadyConfigured;
+  return snap.configuredIn !== undefined;
+}
+
+/** The entry found in the user's own MCP config, if any. */
+export function getConfiguredEntry(): FoundEntry | undefined {
+  return snap.configuredIn;
 }
 
 /** Re-read whether a key is stored, then republish. Never prompts. */
@@ -111,11 +142,21 @@ export function hasKey(): boolean {
   return snap.hasKey;
 }
 
-/** The single definition of "connected" (see the module comment). */
+/**
+ * Whether the local server can start: npx on PATH. Not cached (a few stat
+ * calls, see node-check.ts), so an install the host's PATH picks up counts at
+ * the next refresh.
+ */
+function localServerCanStart(): boolean {
+  return isNpxAvailable();
+}
+
+/** The `mnemoverse.connected` definition (see the module comment). */
 export function isConnected(): boolean {
   switch (snap.host.kind) {
     case "lm":
-      return snap.registered && (getConnectionMode() === "hosted" || snap.hasKey);
+      if (!snap.registered) return false;
+      return getConnectionMode() === "hosted" || (snap.hasKey && localServerCanStart());
     case "cursor":
       return snap.registered;
     case "guidance":
@@ -123,31 +164,74 @@ export function isConnected(): boolean {
   }
 }
 
-/** Short state word plus one line of explanation, for the status bar tooltip. */
+/** Whether memory is known to be set up, for the rating prompt (see the module comment). */
+export function isKnownSetUp(): boolean {
+  switch (snap.host.kind) {
+    case "lm":
+      return isConnected();
+    case "cursor":
+    case "guidance":
+      return snap.configuredIn !== undefined;
+  }
+}
+
+/** `"mnemoverse" in ~/.kiro/settings/mcp.json` — for tooltips and messages. */
+export function describeConfiguredEntry(entry: FoundEntry): string {
+  return `"${entry.server}" in ${displayPath(entry.file)}`;
+}
+
+/** Short state word plus one line of explanation, for the status bar tooltip and menu. */
 export function describeState(): { label: string; detail: string } {
   const app = appName();
+  const found = snap.configuredIn;
   switch (snap.host.kind) {
     case "lm":
       if (getConnectionMode() === "hosted") {
+        // Not "Connected": the editor's OAuth result is invisible to us.
         return {
-          label: "Connected",
+          label: `Added to ${app}`,
           detail: `Hosted server. ${app} asks you to sign in the first time the agent uses memory.`,
+        };
+      }
+      if (!localServerCanStart()) {
+        return {
+          label: "Node.js needed",
+          detail: snap.hasKey
+            ? `Signed in, but the local server needs Node.js 18+ (npx was not found on PATH). Install Node.js and restart ${app}, or use the hosted connection.`
+            : `The local server needs Node.js 18+ (npx was not found on PATH). Use the hosted connection, or install Node.js, restart ${app} and sign in.`,
         };
       }
       return snap.hasKey
         ? { label: "Connected", detail: "Local server, signed in." }
         : { label: "Sign in", detail: 'Run "Mnemoverse: Sign In" to connect memory to the agent.' };
     case "cursor":
-      return snap.alreadyConfigured
-        ? { label: "Connected", detail: "Through the Mnemoverse entry in your Cursor MCP config." }
+      return found
+        ? {
+            label: "In your MCP config",
+            detail: `Cursor uses the Mnemoverse entry ${describeConfiguredEntry(found)}; this extension added nothing. Cursor runs its sign-in (Cursor Settings → Tools & MCPs).`,
+          }
         : { label: "Added to Cursor", detail: "Sign in from Cursor Settings → Tools & MCPs." };
     case "guidance":
-      return snap.host.fallbackFrom
-        ? {
-            label: "Set up needed",
-            detail: `Mnemoverse could not add its server in ${app} (see "Mnemoverse: Show Log"). Add it to the MCP config instead ("Mnemoverse: Copy MCP Config").`,
-          }
-        : { label: "Set up needed", detail: `Add Mnemoverse to ${app}'s MCP config ("Mnemoverse: Copy MCP Config").` };
+      if (found) {
+        return {
+          label: "In your MCP config",
+          detail: `Found the Mnemoverse entry ${describeConfiguredEntry(found)}. ${app} runs its sign-in.`,
+        };
+      }
+      if (snap.host.fallbackFrom) {
+        return {
+          label: "Not added",
+          detail: `Mnemoverse could not add its server in ${app} (see "Mnemoverse: Show Log"). If you haven't yet, add it to the MCP config ("Mnemoverse: Copy MCP Config").`,
+        };
+      }
+      // Only claim "set up needed" where the file was actually checked;
+      // elsewhere the text has to stay true after the user finishes the setup.
+      return mcpConfigTargetFor(snap.host.id).homePaths
+        ? { label: "Set up needed", detail: `Add Mnemoverse to ${app}'s MCP config ("Mnemoverse: Copy MCP Config").` }
+        : {
+            label: "Add via MCP config",
+            detail: `${app} reads MCP servers from its own config, which this extension can't check. If Mnemoverse isn't there yet, add it ("Mnemoverse: Copy MCP Config").`,
+          };
   }
 }
 
