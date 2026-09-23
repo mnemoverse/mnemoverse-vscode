@@ -57,7 +57,7 @@ rewrites parts of it.
    (or add that heading). A release build fails without the exact heading.
 4. Run the same gates CI runs:
    ```sh
-   npm ci && npm run check:version && npm run compile && npm test && npm run check:package && npx vsce package
+   npm ci --ignore-scripts && npm run check:version && npm run compile && npm test && npm run check:package && npx --no vsce package
    ```
 5. Commit (`release: v0.4.0 — <one line>`), push, open a PR. Merge when CI
    (`ci / Build, test, package`) is green.
@@ -96,7 +96,7 @@ the workflow does not pass it. The GitHub release is marked as a pre-release.
 
 | Job | Needs | Does | Permissions |
 | --- | --- | --- | --- |
-| `build` | | Resolves the tag (push ref or the `tag` input), requires `vX.Y.Z` / `vX.Y.Z-pre`, checks out the tag with full history, requires the tagged commit to be on `origin/main`, runs `scripts/check-version.mjs --tag` (tag = package.json = lockfile, exact CHANGELOG heading, no duplicate flavour of the version), `npm ci`, compile, test, `check:package` (what `vsce ls` would ship), `vsce package` once. If the tag already has a GitHub release with the `.vsix`, uses that file instead, after checking it has the same contents as the new package. Uploads the `vsix` artifact and records its SHA-256. | `contents: read` |
+| `build` | | Resolves the tag (push ref or the `tag` input), requires `vX.Y.Z` / `vX.Y.Z-pre`, checks out the tag with full history, requires the tagged commit to be on `origin/main`, runs `scripts/check-version.mjs --tag` (tag = package.json = lockfile, exact CHANGELOG heading, no duplicate flavour of the version), `npm ci --ignore-scripts`, compile, test, `check:package` (what `vsce ls` would ship), `vsce package` once. If the tag already has a GitHub release with the `.vsix`, uses that file instead, after checking it has the same contents as the new package. Uploads the `vsix` artifact and records its SHA-256. | `contents: read` |
 | `openvsx` | build | `ovsx publish <vsix> --skip-duplicate` with the token in the `OVSX_PAT` environment variable, using the ovsx version locked in `package-lock.json`. The pre-release flag comes from the package. | `contents: read` |
 | `marketplace` | build | In environment `marketplace`. With `vars.AZURE_CLIENT_ID` set: `azure/login` (OIDC), then `vsce publish --packagePath <vsix> --azure-credential --skip-duplicate` (+ `--pre-release`). Without it: the same with the token in the `VSCE_PAT` environment variable instead of `--azure-credential`, plus a deadline warning. | `contents: read`, `id-token: write` |
 | `release` | all three | Runs if `build` succeeded and at least one store job succeeded. Creates or updates the GitHub release with the `.vsix`, its SHA-256, links to both stores and, per store, whether this run uploaded the file or the store already had the version; writes the same to the job summary. | `contents: write` |

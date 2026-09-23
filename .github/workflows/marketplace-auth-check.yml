@@ -84,7 +84,7 @@ jobs:
       - name: Verify (Entra ID)
         if: vars.AZURE_CLIENT_ID != ''
         run: |
-          npx vsce verify-pat Mnemoverse --azure-credential
+          npx --no vsce verify-pat Mnemoverse --azure-credential
           echo "Entra ID sign-in works and the identity has a role on publisher Mnemoverse." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify (VSCE_PAT)
@@ -98,7 +98,7 @@ jobs:
             echo "::error::Neither the AZURE_CLIENT_ID variable nor the VSCE_PAT secret is set."
             exit 1
           fi
-          npx vsce verify-pat Mnemoverse
+          npx --no vsce verify-pat Mnemoverse
           {
             echo "VSCE_PAT works today. Azure DevOps global PATs stop working on 2026-12-01;"
             echo "set AZURE_CLIENT_ID / AZURE_TENANT_ID (docs/RELEASING.md) and run this again."

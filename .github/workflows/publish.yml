@@ -76,9 +76,15 @@ name: publish
 #     never through ${{ }} inside `run:` (expression injection).
 #   - Third-party actions are pinned by full commit SHA; Dependabot bumps them.
 #   - No npm cache in this workflow (setup-node's cache-poisoning guidance
-#     for jobs that handle secrets); publish jobs install with
-#     --ignore-scripts, so no dependency install script runs in a job that
-#     later holds a store credential.
+#     for jobs that handle secrets). Every job installs with
+#     --ignore-scripts, so no dependency install script runs in the job
+#     that builds the .vsix or in a job that later holds a store credential.
+#   - vsce and ovsx run as `npx --no ...`: --no makes npx fail when the
+#     locked devDependency is missing, instead of downloading whatever
+#     version the registry has and running it next to a store credential
+#     (in CI, npx otherwise installs a missing package with only a warning).
+#     Each call starts with a subcommand (`publish`, `package`); npx would
+#     treat a leading flag right after `--no <bin>` as its own option.
 #   - The ancestry check below stops accidental releases from unmerged
 #     commits. It does not stop a deliberate one: a tag push runs the
 #     workflow file at the tagged commit. The real gate is repository
@@ -190,8 +196,14 @@ jobs:
         # Writes version= and prerelease= to $GITHUB_OUTPUT.
         run: node scripts/check-version.mjs --tag "$TAG"
 
-      - name: Install dependencies
-        run: npm ci
+      # --ignore-scripts here too: this job builds the file that ships. The
+      # only install scripts in the tree are @vscode/vsce-sign's postinstall
+      # and keytar's `prebuild-install || npm run build` (via ovsx's nested
+      # @vscode/vsce); prebuild-install downloads a native binary that the
+      # lockfile's integrity hashes do not cover. Compile, test, vsce ls and
+      # vsce package need neither.
+      - name: Install dependencies (no install scripts)
+        run: npm ci --ignore-scripts
 
       - name: Compile
         run: npm run compile
@@ -213,7 +225,7 @@ jobs:
           if [ "$PRERELEASE" = "true" ]; then
             ARGS+=(--pre-release)
           fi
-          npx vsce "${ARGS[@]}"
+          npx --no vsce "${ARGS[@]}"
           echo "vsix=$VSIX" >> "$GITHUB_OUTPUT"
 
       # Why this step exists: `vsce package` is not byte-reproducible (the zip
@@ -328,7 +340,8 @@ jobs:
       outcome: ${{ steps.publish.outputs.outcome }}
     steps:
       # Checkout + npm ci only to run the ovsx version locked in
-      # package-lock.json; the .vsix itself comes from the build job.
+      # package-lock.json (`npx --no` below refuses any other); the .vsix
+      # itself comes from the build job.
       - name: Checkout the tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -371,7 +384,7 @@ jobs:
           # build job checks against the tag.
           # tee keeps the log visible; pipefail (shell: bash) keeps ovsx's
           # exit code.
-          npx ovsx publish "$VSIX" --skip-duplicate 2>&1 | tee "$RUNNER_TEMP/publish.log"
+          npx --no ovsx publish "$VSIX" --skip-duplicate 2>&1 | tee "$RUNNER_TEMP/publish.log"
           # --skip-duplicate exits 0 when the store already has the version,
           # so a green job alone does not say whether anything was uploaded.
           # ovsx then prints "<id> v<version> is already published. Skipping
@@ -448,7 +461,7 @@ jobs:
           if [ "$PRERELEASE" = "true" ]; then
             ARGS+=(--pre-release)
           fi
-          npx vsce "${ARGS[@]}" 2>&1 | tee "$RUNNER_TEMP/publish.log"
+          npx --no vsce "${ARGS[@]}" 2>&1 | tee "$RUNNER_TEMP/publish.log"
           # Same skip detection as the openvsx job. vsce prints "Version
           # <version> is already published. Skipping publish."
           # (@vscode/vsce out/publish.js).
@@ -478,7 +491,7 @@ jobs:
           if [ "$PRERELEASE" = "true" ]; then
             ARGS+=(--pre-release)
           fi
-          npx vsce "${ARGS[@]}" 2>&1 | tee "$RUNNER_TEMP/publish.log"
+          npx --no vsce "${ARGS[@]}" 2>&1 | tee "$RUNNER_TEMP/publish.log"
           if grep -q 'already published. Skipping publish.' "$RUNNER_TEMP/publish.log"; then
             echo "outcome=skipped" >> "$GITHUB_OUTPUT"
           else
