@@ -1,0 +1,45 @@
+# Dependabot version updates. Security updates are a separate repository
+# setting (Settings -> Code security -> Dependabot security updates).
+# https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
+
+version: 2
+updates:
+  # All npm dependencies are devDependencies (the .vsix ships none), so one
+  # grouped weekly PR is enough; ci.yml compiles, tests and packages it.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # Wait a few days before proposing a freshly published version, so a
+    # compromised release is more likely to be caught and pulled first.
+    # Security updates are not delayed.
+    cooldown:
+      default-days: 5
+    groups:
+      dev-dependencies:
+        dependency-type: development
+    ignore:
+      # @types/vscode defines the VS Code API surface the code may use and
+      # must not run ahead of engines.vscode (^1.102.0); vsce refuses to
+      # package when it does. Bump both together, by hand.
+      - dependency-name: "@types/vscode"
+      # @types/node should follow the Node version inside VS Code's Electron
+      # at the minimum supported VS Code, not the newest Node. Majors by hand.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Workflow actions are pinned by commit SHA; Dependabot updates the SHA and
+  # the trailing "# vX.Y.Z" comment together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 5
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci(deps)"
