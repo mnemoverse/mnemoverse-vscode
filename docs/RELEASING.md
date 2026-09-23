@@ -173,7 +173,7 @@ not set".
 | --- | --- | --- | --- |
 | `OVSX_PAT` | secret: `openvsx` environment (recommended) or repository | `openvsx` | Open VSX access token (open-vsx.org → Settings → Access Tokens) for a member of namespace `mnemoverse`. **Not** on the `marketplace` environment. |
 | `VSCE_PAT` | secret: `marketplace` environment or repository | `marketplace` (fallback), `marketplace-auth-check` | Azure DevOps PAT, organization "All accessible organizations", scope Marketplace → Manage. **Stops working 2026-12-01.** Delete after the Entra switch. |
-| `AZURE_CLIENT_ID` | variable: repository or `marketplace` environment | `marketplace`, `marketplace-auth-check` | Client ID of the user-assigned managed identity. Setting it switches the Marketplace job from the PAT to Entra ID. |
+| `AZURE_CLIENT_ID` | variable: repository or `marketplace` environment | `marketplace`, `marketplace-auth-check` | Client ID of the user-assigned managed identity. Setting it switches the Marketplace job from the PAT to Entra ID, so set it only after `marketplace-auth-check` passes with the identity (owner checklist, step 7). |
 | `AZURE_TENANT_ID` | variable | same | Entra tenant (directory) ID of that identity. |
 
 Client and tenant IDs are identifiers, not secrets, so they are variables.
@@ -224,20 +224,25 @@ access. Aim to finish by mid-November.
      (or start those from a tag).
    - Optional: *Required reviewers* = the release owner. Every Marketplace
      publish then waits for one approval click.
-5. **Repository variables** `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` (step 2
-   values). From now on the Marketplace job uses Entra ID and ignores
-   `VSCE_PAT`.
-6. **Get the identity's Marketplace profile id.** Run **Actions →
-   marketplace-auth-check → Run workflow**. Its summary prints the profile id
+5. **Get the identity's Marketplace profile id.** Run **Actions →
+   marketplace-auth-check → Run workflow** with the inputs `client_id` and
+   `tenant_id` set to the step 2 values. Its summary prints the profile id
    (read via `az rest .../_apis/profile/profiles/me` while signed in as the
    identity). This is the id the publisher needs, not the client ID. The
-   verify step fails on this first run; that is expected.
-7. **Add the identity to the publisher**: https://marketplace.visualstudio.com/manage
+   verify step fails on this first run; that is expected. Releases are not
+   affected: `publish.yml` keeps using `VSCE_PAT` until step 8.
+6. **Add the identity to the publisher**: https://marketplace.visualstudio.com/manage
    → publisher **Mnemoverse** → *Members* → *Add* → paste the profile id →
    role **Contributor**.
-8. **Re-run `marketplace-auth-check`.** It should pass. Note that
-   `vsce verify-pat` accepts any role, including Reader, so it proves sign-in
-   and membership but not publish rights.
+7. **Run `marketplace-auth-check` again** with the same two inputs. It should
+   pass. Note that `vsce verify-pat` accepts any role, including Reader, so it
+   proves sign-in and membership but not publish rights.
+8. **Repository variables** `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` (step 2
+   values). Set them only after step 7 passes: from now on the Marketplace job
+   uses Entra ID and ignores `VSCE_PAT`, so setting them earlier makes every
+   release fail on the Marketplace until the identity is a publisher member.
+   Run `marketplace-auth-check` once more with empty inputs to confirm the
+   variables.
 9. **Prove a real publish** with the next pre-release (for example
    `v0.3.0-pre`). In the `marketplace` job log, the "Publish (Entra ID)" step
    should run and end with `Published Mnemoverse.mnemoverse-vscode v0.3.0`.
