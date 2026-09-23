@@ -1,0 +1,81 @@
+name: marketplace-auth-check
+
+# Manual check of the credential the publish workflow will use for the
+# VS Code Marketplace. Publishes nothing and consumes no version number.
+#
+# Use it while migrating from VSCE_PAT to Microsoft Entra ID (owner checklist
+# in docs/RELEASING.md): after setting AZURE_CLIENT_ID / AZURE_TENANT_ID, run
+# Actions -> marketplace-auth-check -> Run workflow. It signs in exactly like
+# publish.yml's marketplace job (same `marketplace` environment, so the same
+# federated-credential subject) and runs `vsce verify-pat` against publisher
+# Mnemoverse.
+#
+# What a green run proves: the identity (or PAT) can authenticate to the
+# Marketplace and has *some* role on the publisher. `verify-pat` accepts any
+# of Creator, Owner, Contributor or Reader, so it does not prove the identity
+# can publish; the first -pre release does that.
+#
+# If the `marketplace` environment is later restricted to v* tags, start this
+# workflow from a tag (Run workflow -> "Use workflow from" -> Tags).
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  verify:
+    name: Verify Marketplace credential
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: marketplace
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node (version from .nvmrc)
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Install dependencies (no install scripts)
+        run: npm ci --ignore-scripts
+
+      - name: Sign in to Azure (Entra ID workload identity)
+        if: vars.AZURE_CLIENT_ID != ''
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Verify (Entra ID)
+        if: vars.AZURE_CLIENT_ID != ''
+        run: |
+          npx vsce verify-pat Mnemoverse --azure-credential
+          echo "Entra ID sign-in works and the identity has a role on publisher Mnemoverse." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify (VSCE_PAT)
+        if: vars.AZURE_CLIENT_ID == ''
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "::error::Neither the AZURE_CLIENT_ID variable nor the VSCE_PAT secret is set."
+            exit 1
+          fi
+          npx vsce verify-pat Mnemoverse -p "$VSCE_PAT"
+          {
+            echo "VSCE_PAT works today. Azure DevOps global PATs stop working on 2026-12-01;"
+            echo "set AZURE_CLIENT_ID / AZURE_TENANT_ID (docs/RELEASING.md) and run this again."
+          } >> "$GITHUB_STEP_SUMMARY"
