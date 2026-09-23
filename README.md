@@ -1,6 +1,6 @@
 # Mnemoverse Memory for VS Code
 
-> Persistent memory for GitHub Copilot Chat Agent Mode — one memory, every AI tool.
+> Persistent memory for GitHub Copilot Chat Agent Mode that learns from outcomes, with shared rooms — one memory across every AI tool you connect.
 
 [![VS Code Marketplace](https://vsmarketplacebadges.dev/version-short/Mnemoverse.mnemoverse-vscode.svg)](https://marketplace.visualstudio.com/items?itemName=Mnemoverse.mnemoverse-vscode)
 [![Open VSX](https://img.shields.io/open-vsx/v/mnemoverse/mnemoverse-vscode?label=Open%20VSX&color=c160ef)](https://open-vsx.org/extension/mnemoverse/mnemoverse-vscode)
@@ -68,6 +68,8 @@ The extension launches `@mnemoverse/mcp-memory-server@latest` via `npx`. Common 
 | `memory_read` | Search memories by natural-language query |
 | `memory_feedback` | Rate a memory as helpful or harmful (affects future retrieval) |
 | `memory_stats` | Show total memories, domains, and average importance |
+| `memory_list_recent` | List the newest memories first, no search query needed |
+| `memory_create_room`, `memory_invite_to_room`, `memory_join_room`, `memory_list_rooms` | Share a memory pool with other agents and people through rooms |
 
 For the complete current tool list, see the [server README](https://github.com/mnemoverse/mcp-memory-server#tools). Memory deletion is an administrative REST operation, not exposed by this MCP server; see the [privacy and deletion policy](https://github.com/mnemoverse/mcp-memory-server#privacy-policy).
 
