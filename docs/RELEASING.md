@@ -1,0 +1,240 @@
+# Releasing Mnemoverse Memory
+
+The extension is published to two stores from one GitHub Actions workflow,
+[`.github/workflows/publish.yml`](../.github/workflows/publish.yml):
+
+| Store | ID | Page |
+| --- | --- | --- |
+| VS Code Marketplace | `Mnemoverse.mnemoverse-vscode` | https://marketplace.visualstudio.com/items?itemName=Mnemoverse.mnemoverse-vscode |
+| Open VSX | `mnemoverse/mnemoverse-vscode` | https://open-vsx.org/extension/mnemoverse/mnemoverse-vscode |
+
+Pushing a release tag starts the workflow. Nobody publishes from a laptop:
+`package.json` has no `publish` script on purpose.
+
+> **Deadline: 2026-12-01.** On that date Azure DevOps global PATs stop working,
+> and `VSCE_PAT` is one. Until the [owner checklist](#owner-checklist-marketplace-publishing-without-a-pat-before-2026-12-01)
+> below is done, every release after that date will fail on the Marketplace
+> (Open VSX and the GitHub release still go out).
+
+## Versions and tags
+
+| Tag | Meaning | `package.json` version |
+| --- | --- | --- |
+| `vX.Y.Z` | stable release | `X.Y.Z` |
+| `vX.Y.Z-pre` | pre-release, published with `--pre-release` | `X.Y.Z` (no suffix) |
+
+- `package.json` always holds plain `X.Y.Z`. The Marketplace rejects semver
+  pre-release suffixes; "pre-release" is a flag on the upload.
+- **Each store accepts a version number once.** A version is either a
+  pre-release or a stable release, never both. To promote pre-release code to
+  stable, bump the version; the build fails if `vX.Y.Z` is tagged when
+  `vX.Y.Z-pre` exists, or the other way round.
+- Convention (Microsoft's recommendation, warned about but not enforced):
+  **odd minor = pre-release** (0.3.x, 0.5.x), **even minor = stable**
+  (0.4.x, 0.6.x). The two lines then never compete for version numbers: a
+  stable patch never collides with a number the pre-release line already
+  used, and pre-release users (who always get the highest version) move to
+  stable only when a higher stable version ships.
+- Users receive a pre-release only after choosing **Switch to Pre-Release
+  Version** on the extension page. Once they have, they also get any later
+  stable release with a higher version.
+
+## Cut a stable release
+
+Use Node 24 (`nvm use` reads `.nvmrc`). npm 11 keeps the lockfile clean; npm 10
+rewrites parts of it.
+
+1. Start from current main:
+   ```sh
+   git switch -c release/v0.4.0 origin/main
+   ```
+2. Bump the version in `package.json` and both version fields of
+   `package-lock.json`:
+   ```sh
+   npm version 0.4.0 --no-git-tag-version
+   ```
+3. In `CHANGELOG.md`, turn `## [Unreleased]` into `## [0.4.0] — YYYY-MM-DD`
+   (or add that heading). A release build fails without the exact heading.
+4. Run the same gates CI runs:
+   ```sh
+   npm ci && npm run check:version && npm run compile && npm test && npm run check:package && npx vsce package
+   ```
+5. Commit (`release: v0.4.0 — <one line>`), push, open a PR. Merge when CI
+   (`ci / Build, test, package`) is green.
+6. Tag the merge commit on main and push the tag:
+   ```sh
+   git fetch origin
+   git log -1 --oneline origin/main     # confirm this is the release commit
+   git tag -a v0.4.0 origin/main -m "v0.4.0"
+   git push origin v0.4.0
+   ```
+7. Watch **Actions → publish**. If the `marketplace` environment has required
+   reviewers, approve the Marketplace job there.
+8. Check both store pages show 0.4.0 (the Marketplace can take a few minutes)
+   and that the GitHub release has the `.vsix` attached.
+
+## Cut a pre-release
+
+Same steps with an odd minor and a `-pre` tag:
+
+```sh
+npm version 0.3.0 --no-git-tag-version
+# CHANGELOG: ## [0.3.0] — YYYY-MM-DD (pre-release)
+# PR, merge, then:
+git tag -a v0.3.0-pre origin/main -m "v0.3.0-pre"
+git push origin v0.3.0-pre
+```
+
+The build packages with `vsce package --pre-release`, checks that the packaged
+manifest carries the pre-release flag, publishes to both stores with
+`--pre-release`, and marks the GitHub release as a pre-release.
+
+## What the workflow does
+
+| Job | Needs | Does | Permissions |
+| --- | --- | --- | --- |
+| `build` | | Resolves the tag (push ref or the `tag` input), requires `vX.Y.Z` / `vX.Y.Z-pre`, checks out the tag with full history, requires the tagged commit to be on `origin/main`, runs `scripts/check-version.mjs --tag` (tag = package.json = lockfile, exact CHANGELOG heading, no duplicate flavour of the version), `npm ci`, compile, test, `check:package` (what `vsce ls` would ship), `vsce package` once, uploads the `vsix` artifact and records its SHA-256. | `contents: read` |
+| `openvsx` | build | `ovsx publish <vsix> -p $OVSX_PAT --skip-duplicate` (+ `--pre-release`), using the ovsx version locked in `package-lock.json`. | `contents: read` |
+| `marketplace` | build | In environment `marketplace`. With `vars.AZURE_CLIENT_ID` set: `azure/login` (OIDC), then `vsce publish --packagePath <vsix> --azure-credential --skip-duplicate`. Without it: the same with `-p $VSCE_PAT`, plus a deadline warning. | `contents: read`, `id-token: write` |
+| `release` | all three | Runs if `build` succeeded and at least one store job succeeded. Creates or updates the GitHub release with the `.vsix`, its SHA-256, links to both stores and which one published; writes the same to the job summary. | `contents: write` |
+
+`openvsx` and `marketplace` do not depend on each other: one store failing
+never blocks the other. Both publish the same `.vsix` bytes built once in
+`build`.
+
+CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs the same
+gates on every PR and push to main and uploads the `.vsix` as an artifact, so
+a reviewer can install the exact build (**Extensions → … → Install from
+VSIX…**).
+
+## When something fails
+
+- **`build` failed.** Nothing was published. Fix it on main through a PR. Because
+  no store has the version yet, you may move the tag:
+  `git tag -d v0.4.0 && git push origin :refs/tags/v0.4.0`, then tag the fixed
+  commit. Never move a tag once any store has the version; bump instead.
+- **One store failed** (for example an expired token). Fix the cause (rotate the
+  secret, finish the Entra setup), then open the run and click **Re-run failed
+  jobs**. `--skip-duplicate` makes the store that already has the version a
+  no-op, the failed store publishes, and the `release` job re-runs and rewrites
+  the release notes with both results. Re-runs use the run's artifact, so the
+  bytes are identical. Artifacts are kept 30 days.
+- **Both stores failed.** The `release` job is skipped. Fix and use **Re-run
+  failed jobs** the same way.
+- **Start a fresh run for an existing tag.** **Actions → publish → Run
+  workflow**, `tag` = the tag. The workflow file comes from the branch you run
+  it from (normally main); everything else comes from the tag. This works for
+  tags created after this pipeline landed; older tags lack `.nvmrc` and
+  `scripts/check-version.mjs`.
+
+## Secrets and variables
+
+Set under **Settings → Secrets and variables → Actions**, at repository level
+or on the `marketplace` environment (environment values win).
+
+| Name | Kind | Used by | Notes |
+| --- | --- | --- | --- |
+| `OVSX_PAT` | secret | `openvsx` | Open VSX access token (open-vsx.org → Settings → Access Tokens) for a member of namespace `mnemoverse`. |
+| `VSCE_PAT` | secret | `marketplace` (fallback) | Azure DevOps PAT, organization "All accessible organizations", scope Marketplace → Manage. **Stops working 2026-12-01.** Delete after the Entra switch. |
+| `AZURE_CLIENT_ID` | variable | `marketplace`, `marketplace-auth-check` | Client ID of the user-assigned managed identity. Setting it switches the Marketplace job from the PAT to Entra ID. |
+| `AZURE_TENANT_ID` | variable | same | Entra tenant (directory) ID of that identity. |
+
+Client and tenant IDs are identifiers, not secrets, so they are variables.
+
+## Owner checklist: Marketplace publishing without a PAT (before 2026-12-01)
+
+The replacement for the PAT is Microsoft Entra ID: a user-assigned managed
+identity that trusts this repository's GitHub Actions through a federated
+credential and is a member of publisher Mnemoverse. `vsce publish
+--azure-credential` then uses the Azure CLI session that `azure/login` opens.
+Microsoft documents the Marketplace side for Azure Pipelines; the GitHub
+Actions form used here is the one `github/vscode-codeql` publishes with.
+Everything on the workflow side is already in place; these steps need account
+access. Aim to finish by mid-November.
+
+1. **Azure subscription** in the Mnemoverse Entra tenant. A managed identity is
+   an Azure resource, so it needs one. Pay-as-you-go sign-up asks for a card;
+   the identity itself has no charge.
+2. **User-assigned managed identity** (portal: *Managed Identities → Create*),
+   for example:
+   ```sh
+   az group create -n rg-mnemoverse-release -l westeurope
+   az identity create -g rg-mnemoverse-release -n id-mnemoverse-vscode-publish
+   ```
+   Note its **Client ID** and **Tenant ID**. It needs no Azure role
+   assignment. Use a managed identity, not an app registration; a third-party
+   report says app registrations are rejected by the Marketplace.
+3. **Federated credential** on that identity:
+   - issuer `https://token.actions.githubusercontent.com`
+   - subject `repo:mnemoverse/mnemoverse-vscode:environment:marketplace`
+   - audience `api://AzureADTokenExchange`
+   ```sh
+   az identity federated-credential create \
+     -g rg-mnemoverse-release --identity-name id-mnemoverse-vscode-publish \
+     --name github-mnemoverse-vscode-marketplace \
+     --issuer https://token.actions.githubusercontent.com \
+     --subject repo:mnemoverse/mnemoverse-vscode:environment:marketplace \
+     --audiences api://AzureADTokenExchange
+   ```
+   (Portal: identity → *Federated credentials → Add → GitHub Actions*, entity
+   type **Environment**, environment `marketplace`.) The subject must match
+   exactly; renaming the environment breaks sign-in.
+4. **GitHub environment `marketplace`** (*Settings → Environments*). The workflow
+   creates it on first use if missing, but set it up now:
+   - *Deployment branches and tags → Selected*: add tag pattern `v*`, and
+     `main` so `marketplace-auth-check` can run (or run that workflow from a tag).
+   - Optional: *Required reviewers* = the release owner. Every Marketplace
+     publish then waits for one approval click.
+5. **Repository variables** `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` (step 2
+   values). From now on the Marketplace job uses Entra ID and ignores
+   `VSCE_PAT`.
+6. **Get the identity's Marketplace profile id.** Run **Actions →
+   marketplace-auth-check → Run workflow**. Its summary prints the profile id
+   (read via `az rest .../_apis/profile/profiles/me` while signed in as the
+   identity). This is the id the publisher needs, not the client ID. The
+   verify step fails on this first run; that is expected.
+7. **Add the identity to the publisher**: https://marketplace.visualstudio.com/manage
+   → publisher **Mnemoverse** → *Members* → *Add* → paste the profile id →
+   role **Contributor**.
+8. **Re-run `marketplace-auth-check`.** It should pass. Note that
+   `vsce verify-pat` accepts any role, including Reader, so it proves sign-in
+   and membership but not publish rights.
+9. **Prove a real publish** with the next pre-release (for example
+   `v0.3.0-pre`). In the `marketplace` job log, the "Publish (Entra ID)" step
+   should run and end with `Published Mnemoverse.mnemoverse-vscode v0.3.0`.
+   If it fails, delete the two variables to fall back to `VSCE_PAT` while it
+   still works, fix, and re-run the failed job.
+10. **Remove the PAT**: delete the `VSCE_PAT` secret, and revoke the token in
+    Azure DevOps (*User settings → Personal access tokens → Revoke*).
+
+### Watch: trusted publishing (`vsce publish --oidc`)
+
+`@vscode/vsce` 4.0.0, which this repo uses, contains a hidden `--oidc` option
+for GitHub trusted publishing. With it, the Marketplace job would need only
+`id-token: write`: no Azure subscription, identity or profile id. As of
+2026-09-23 the Marketplace side is not live (its token-exchange endpoint
+returns 404, and Microsoft said on 2026-09-14 that it is not complete). Do not
+wait for it past about 2026-11-01. If it ships first, the switch is: register
+the repository as a trusted publisher on the Marketplace, then in
+`publish.yml` replace the `azure/login` step and `--azure-credential` with
+`--oidc`.
+
+`ovsx` 1.2 also has a `--trusted-publishing` option for Open VSX. Whether
+open-vsx.org accepts it for the `mnemoverse` namespace has not been checked;
+`OVSX_PAT` stays in use.
+
+## Repository settings that make the gates real
+
+The workflow refuses tags that are not on main, but a tag push runs the
+workflow file from the tagged commit, so a branch could edit the check away.
+These settings (owner, *Settings → Rules* and *Environments*) close that:
+
+- **Tag ruleset** for `refs/tags/v*`: restrict creation, update and deletion to
+  admins.
+- **Branch ruleset** for `main`: require a pull request and the
+  `Build, test, package` status check; block force pushes.
+- **`marketplace` environment** as in step 4. Optionally move `OVSX_PAT` into
+  an environment of its own with the same tag policy; the `openvsx` job would
+  then need an `environment:` line.
+- **Dependabot security updates** on (*Settings → Code security*).
+  `.github/dependabot.yml` covers version updates.
