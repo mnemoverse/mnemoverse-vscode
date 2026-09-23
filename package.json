@@ -1,52 +1,53 @@
 {
   "name": "mnemoverse-vscode",
-  "displayName": "Mnemoverse Memory",
-  "description": "Persistent memory for GitHub Copilot agent mode that learns from outcomes, with shared rooms. The same memory follows you across Claude, Cursor and ChatGPT — sign in once in the browser.",
-  "version": "0.2.1",
+  "displayName": "Mnemoverse Agent Memory",
+  "description": "Persistent memory for GitHub Copilot agent mode and Cursor that learns from outcomes, with shared rooms. Browser sign-in, no key to paste. The same memory works in Claude, ChatGPT and other MCP clients.",
+  "version": "0.3.0",
   "publisher": "Mnemoverse",
-  "preview": true,
   "pricing": "Free",
   "license": "MIT",
-  "homepage": "https://mnemoverse.com/docs/api/mcp-server",
+  "homepage": "https://mnemoverse.com/docs/api/vs-code",
   "bugs": {
     "url": "https://github.com/mnemoverse/mnemoverse-vscode/issues"
   },
+  "qna": "https://github.com/mnemoverse/mnemoverse-vscode/issues",
   "repository": {
     "type": "git",
     "url": "https://github.com/mnemoverse/mnemoverse-vscode.git"
-  },
-  "sponsor": {
-    "url": "https://github.com/sponsors/mnemoverse"
   },
   "engines": {
     "vscode": "^1.102.0"
   },
   "categories": [
     "AI",
-    "Chat",
-    "Other"
+    "Chat"
   ],
   "keywords": [
-    "mcp",
     "memory",
-    "ai",
-    "ai-agent",
+    "ai-memory",
+    "agent-memory",
+    "persistent-memory",
+    "long-term-memory",
+    "copilot-memory",
+    "mcp-memory",
+    "shared-memory",
+    "chat-memory",
+    "memory-bank",
+    "remember",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
     "copilot",
+    "github-copilot",
     "copilot-chat",
     "agent-mode",
-    "mnemoverse",
-    "persistent-memory",
-    "shared-memory",
-    "cross-tool",
-    "model-context-protocol",
-    "mcp-server",
-    "github-copilot",
-    "long-term-memory",
-    "agent-memory",
-    "claude",
     "cursor",
+    "ai",
+    "ai-agent",
+    "claude",
     "chatgpt",
-    "memory-rooms"
+    "mnemoverse",
+    "cross-tool"
   ],
   "icon": "icon.png",
   "galleryBanner": {
@@ -195,7 +196,7 @@
           ],
           "default": "local",
           "scope": "application",
-          "markdownDescription": "How Mnemoverse Memory connects in editors that support VS Code's MCP server API (VS Code, VSCodium, Positron, Theia). Cursor and other editors always use the hosted server."
+          "markdownDescription": "How Mnemoverse connects in editors that support VS Code's MCP server API (VS Code, VSCodium, Positron, Theia). Cursor and other editors always use the hosted server."
         },
         "mnemoverse.showStatusBar": {
           "type": "boolean",
@@ -207,7 +208,7 @@
     "walkthroughs": [
       {
         "id": "mnemoverse.getStarted",
-        "title": "Get started with Mnemoverse Memory",
+        "title": "Get started with Mnemoverse Agent Memory",
         "description": "Connect long-term memory to your editor's agent, check that it works, and share it through a room.",
         "steps": [
           {

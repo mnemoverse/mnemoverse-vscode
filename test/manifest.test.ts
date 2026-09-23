@@ -26,7 +26,7 @@ describe("manifest", () => {
   it("walkthrough: id, connect-step variants per host, and media files that exist", () => {
     const [wt] = pkg.contributes.walkthroughs;
     expect(wt.id).toBe("mnemoverse.getStarted");
-    expect(wt.title).toBe("Get started with Mnemoverse Memory");
+    expect(wt.title).toBe("Get started with Mnemoverse Agent Memory");
     const whens = wt.steps.map((s: { when?: string }) => s.when ?? "");
     expect(whens.some((w: string) => w.includes("mnemoverse.host == lm"))).toBe(true);
     expect(whens.some((w: string) => w.includes("mnemoverse.host == cursor"))).toBe(true);

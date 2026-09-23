@@ -99,7 +99,7 @@ export function buildMenuItems(): MenuItem[] {
 export async function showMenu(): Promise<void> {
   const { label, detail } = describeState();
   const picked = await vscode.window.showQuickPick(buildMenuItems(), {
-    title: `Mnemoverse Memory: ${label}`,
+    title: `Mnemoverse: ${label}`,
     placeHolder: detail,
   });
   if (picked?.run) {

@@ -112,6 +112,27 @@ something.
 - The local server now starts with `MNEMOVERSE_CLIENT=vscode-extension`, so it can
   word its errors for extension users.
 
+### Listing
+
+- **Name**: "Mnemoverse Agent Memory" (was "Mnemoverse Memory"). The MCP server
+  keeps its label, "Mnemoverse Memory".
+- **Description** names the two editors the extension now connects, GitHub
+  Copilot agent mode and Cursor, and drops "sign in once", which read as one
+  sign-in for every tool.
+- **Keywords**: add `ai-memory`, `copilot-memory`, `mcp-memory`, `chat-memory`,
+  `memory-bank` and `remember`; drop `memory-rooms`. `cursor` stays, now that
+  Cursor works.
+- The **Preview** flag is gone, and so is the Sponsor link (there is no Sponsors
+  page). Categories are AI and Chat. The Learn link and **Open Documentation**
+  open the [VS Code guide](https://mnemoverse.com/docs/api/vs-code) instead of
+  the npm server page, and Q&A points to GitHub issues.
+- **README** leads with what the agent gets and how to start in VS Code, Cursor
+  and the config-file editors, with an **Install in VS Code** button. The tool
+  table lists all ten tools (adds `vault_list`, marks rooms Beta). The client
+  table has fixed links, and the ChatGPT row now says OAuth connector or a
+  Custom GPT with an API key. The MCP Registry badge, which opened a raw JSON
+  dump, is gone.
+
 ### Fixed
 
 - Activation no longer fails as a whole when the editor has no `vscode.lm` or
@@ -130,22 +151,23 @@ something.
 
 ## [0.2.1] — 2026-09-23
 
-Listing text only: the extension, its commands and its sign-in are unchanged.
+Listing text, plus a refreshed tool list: commands and sign-in are unchanged.
+The new version number makes VS Code re-read the server's tools, so agents see
+rooms, `memory_list_recent` and `vault_list`.
 
 ### Changed
 
-- **Marketplace and Open VSX description** now matches the product: memory that
-  learns from outcomes (feedback re-ranks recall), with shared rooms, the same
-  memory across Claude, Cursor and ChatGPT, one browser sign-in. The June text
-  named only Copilot and said nothing about outcomes or rooms.
+- **Marketplace and Open VSX description**: memory that learns from outcomes
+  (feedback re-ranks recall), with shared rooms, the same memory across Claude,
+  Cursor and ChatGPT, and browser sign-in. The June text said nothing about
+  outcomes or rooms.
 - **Keywords** add `mcp-server`, `github-copilot`, `long-term-memory`,
   `agent-memory`, `claude`, `cursor`, `chatgpt` and `memory-rooms`, the terms
   people search the Marketplace by.
-- **README**: the tool table no longer lists `memory_delete` and
-  `memory_delete_domain` (deletion is an administrative REST operation, not a
-  tool of the server this extension launches) and drops the fixed "six tools";
-  it adds `memory_list_recent` and the four room tools, and links the server's
-  complete tool list.
+- **README**: the tool table now matches the server this extension launches. It
+  adds `memory_list_recent` and the four room tools, drops the two deletion
+  tools the server removed in 0.9.0 and the fixed tool count, and links the
+  server's complete tool list.
 
 ## [0.2.0] — 2026-06-12
 

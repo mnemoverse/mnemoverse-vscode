@@ -41,7 +41,7 @@ import { openGitHubRepo, openRatingPage, recordRatingActivation, scheduleRatingP
 /** globalState flag: the first-run welcome has been shown once (ever). */
 const WELCOME_SHOWN_KEY = "mnemoverse.welcomeShown";
 
-const DOCS_URL = "https://mnemoverse.com/docs/api/mcp-server";
+const DOCS_URL = "https://mnemoverse.com/docs/api/vs-code";
 
 /**
  * Extension entry point, called after `onStartupFinished` (or `onUri` /

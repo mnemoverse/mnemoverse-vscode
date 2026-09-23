@@ -77,7 +77,7 @@ export async function maybeAskForRating(context: vscode.ExtensionContext, now = 
 
   const store = ratingStoreFor(appName());
   const choice = await vscode.window.showInformationMessage(
-    `Is Mnemoverse Memory useful? A rating on ${store.name} helps other developers find it.`,
+    `Is Mnemoverse memory useful to you? A rating on ${store.name} helps other developers find it.`,
     "Rate",
     "Later",
     "Don't ask again",

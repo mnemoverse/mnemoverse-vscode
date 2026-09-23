@@ -258,7 +258,7 @@ export function publish(): void {
 
   if (statusItem) {
     const { label, detail } = describeState();
-    statusItem.tooltip = `Mnemoverse Memory: ${label}\n${detail}\nClick for options.`;
+    statusItem.tooltip = `Mnemoverse: ${label}\n${detail}\nClick for options.`;
     const show = vscode.workspace.getConfiguration("mnemoverse").get<boolean>("showStatusBar", true);
     if (show) statusItem.show();
     else statusItem.hide();

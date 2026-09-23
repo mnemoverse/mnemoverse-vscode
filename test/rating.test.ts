@@ -47,7 +47,7 @@ describe("rating prompt (glue)", () => {
     const { vscode, ctx, rating } = await veteran();
     expect(await rating.maybeAskForRating(ctx as never)).toBe(true);
     const m = vscode.__state.messages.at(-1)!;
-    expect(m.message).toBe("Is Mnemoverse Memory useful? A rating on the VS Code Marketplace helps other developers find it.");
+    expect(m.message).toBe("Is Mnemoverse memory useful to you? A rating on the VS Code Marketplace helps other developers find it.");
     expect(m.items).toEqual(["Rate", "Later", "Don't ask again"]);
     // Once per session.
     expect(await rating.maybeAskForRating(ctx as never)).toBe(false);
@@ -130,7 +130,7 @@ describe("rating prompt (glue)", () => {
     expect(rating.RATING_DELAY_MS).toBe(3 * 60 * 1000);
     await vi.advanceTimersByTimeAsync(rating.RATING_DELAY_MS + 10);
     await flush();
-    expect(vscode.__state.messages.some((m) => m.message.startsWith("Is Mnemoverse Memory useful?"))).toBe(true);
+    expect(vscode.__state.messages.some((m) => m.message.startsWith("Is Mnemoverse memory useful to you?"))).toBe(true);
 
     // A second activation disposed before the delay never asks.
     const second = await veteran();
