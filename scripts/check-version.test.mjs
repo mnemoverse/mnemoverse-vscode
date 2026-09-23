@@ -23,6 +23,17 @@ describe("changelog headings", () => {
     expect(hasVersionHeading("### [0.2.1] — a sub-heading\n", "0.2.1")).toBe(false);
   });
 
+  it("matches every regex metacharacter in an unvalidated version literally", () => {
+    // Runs before the semver check rejects such versions, so it must not throw
+    // or treat them as patterns.
+    expect(hasVersionHeading("## [1.0.0+b] — date\n", "1.0.0+b")).toBe(true);
+    expect(hasVersionHeading("## [1.0.00b] — date\n", "1.0.0+b")).toBe(false);
+    expect(hasVersionHeading("## [\\d] — date\n", "\\d")).toBe(true);
+    expect(hasVersionHeading("## [7] — date\n", "\\d")).toBe(false);
+    expect(() => hasVersionHeading("## [1.(0] — date\n", "1.(0")).not.toThrow();
+    expect(hasVersionHeading("## [1.(0] — date\n", "1.(0")).toBe(true);
+  });
+
   it("finds an Unreleased heading case-insensitively, with or without brackets", () => {
     expect(hasUnreleasedHeading("## [Unreleased]\n")).toBe(true);
     expect(hasUnreleasedHeading("## unreleased\n")).toBe(true);

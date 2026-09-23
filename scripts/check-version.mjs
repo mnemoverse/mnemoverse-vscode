@@ -75,14 +75,16 @@ const RELEASE_TAG = /^v((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))(-pre)?$/
 /**
  * Does the changelog have a second-level heading for `version`?
  * Accepts the repo's format `## [0.2.1] — 2026-09-23` and the bare
- * `## 0.2.1` some tools write. Escaping the dots matters: without it
- * `## [0.2.1]` would also satisfy a check for 0.201.
+ * `## 0.2.1` some tools write. Escaping matters: without it `## [0.2.1]`
+ * would also satisfy a check for 0.201. Every regex metacharacter is escaped,
+ * not only dots, because this runs on package.json's raw `version` before the
+ * semver check has rejected it (a "1.0.0+b" or "\d" must match literally).
  *
  * @param {string} changelog
  * @param {string} version
  */
 export function hasVersionHeading(changelog, version) {
-  const v = version.replace(/\./g, "\\.");
+  const v = version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`^##\\s+\\[?${v}\\]?(?:\\s|$)`, "m").test(changelog);
 }
 
