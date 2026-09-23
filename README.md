@@ -152,9 +152,13 @@ With `mnemoverse.connection` set to `hosted`, the provider returns an HTTP serve
 
 Found a vulnerability? Contact [security@mnemoverse.com](mailto:security@mnemoverse.com) or file a private advisory at [github.com/mnemoverse/mnemoverse-vscode/security/advisories/new](https://github.com/mnemoverse/mnemoverse-vscode/security/advisories/new). Coordinated disclosure policy: [mnemoverse.com/.well-known/security.txt](https://mnemoverse.com/.well-known/security.txt).
 
-## Feedback
+## From the author
 
-If Mnemoverse helps you, a rating on the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Mnemoverse.mnemoverse-vscode&ssr=false#review-details) or [Open VSX](https://open-vsx.org/extension/mnemoverse/mnemoverse-vscode/reviews) helps other developers find it, and a [star on GitHub](https://github.com/mnemoverse/mnemoverse-vscode) helps too. Bugs and ideas: [open an issue](https://github.com/mnemoverse/mnemoverse-vscode/issues).
+I'm Eduard Izgorodin, and I build Mnemoverse. I made this extension because my agents kept starting from zero: every new chat in Copilot, Claude or Cursor asked again what the previous one had already learned. I use Mnemoverse memory every day across those tools, and our team runs its shared rooms on it.
+
+If it helps you, a rating on the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Mnemoverse.mnemoverse-vscode&ssr=false#review-details) or [Open VSX](https://open-vsx.org/extension/mnemoverse/mnemoverse-vscode/reviews) helps other developers find it, and a [star on GitHub](https://github.com/mnemoverse/mnemoverse-vscode) helps too. If something breaks or feels wrong, [open an issue](https://github.com/mnemoverse/mnemoverse-vscode/issues). I read every one.
+
+— Eduard
 
 ## Source
 
