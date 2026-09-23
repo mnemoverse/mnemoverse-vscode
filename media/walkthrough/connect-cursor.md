@@ -8,6 +8,6 @@ To finish:
 2. Click **Connect** (or **Login**) next to **extension-mnemoverse**.
 3. Approve the connection in your browser.
 
-Cursor keeps the sign-in; the extension stores no key in Cursor.
+Cursor keeps the sign-in; the extension doesn't use a key in Cursor. To sign out, click **Logout** next to the server in the same place.
 
 If Mnemoverse was already in your `~/.cursor/mcp.json` or the project's `.cursor/mcp.json`, the extension doesn't add a second copy, so the tools don't appear twice.

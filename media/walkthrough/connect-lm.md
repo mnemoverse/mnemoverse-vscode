@@ -4,6 +4,8 @@
 
 After that, the agent in this editor can store and recall memories. MCP tools run in the chat's **Agent** mode.
 
+The console's browser sign-in doesn't accept Positron, Theia or VSCodium Insiders yet. In those editors, create a key at [console.mnemoverse.com](https://console.mnemoverse.com) and paste it with **Mnemoverse: Set API Key**; the extension offers this when you click **Sign In**.
+
 ## Two ways to connect
 
 | Connection | What runs | Sign-in |

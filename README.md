@@ -19,11 +19,11 @@ What the extension can do depends on the editor it is installed in:
 | Editor | What the extension does |
 | ------ | ----------------------- |
 | **VS Code 1.102+**, Insiders | Registers Mnemoverse as an MCP server through VS Code's MCP API. The agent in chat (Agent mode) gets the memory tools. |
-| **VSCodium, Positron, Eclipse Theia** | The same, through the same API. The tools appear only where the editor's agent uses MCP servers from extensions (for example VSCodium with a separately installed agent, or Positron with Copilot tools). Browser Sign In is not yet accepted from Positron and Theia; paste a key with **Set API Key** instead. |
+| **VSCodium, Positron, Eclipse Theia** | The same, through the same API. The tools appear only where the editor's agent uses MCP servers from extensions (for example VSCodium with a separately installed agent, or Positron with Copilot tools). Browser Sign In is not yet accepted from Positron, Theia, VSCodium Insiders or other forks the console doesn't know; there the extension offers **Set API Key** with a key from the [console](https://console.mnemoverse.com) instead. |
 | **Cursor** | Adds Mnemoverse's hosted server to Cursor's MCP servers, listed as `extension-mnemoverse`. You sign in from **Cursor Settings → Tools & MCPs** (click Connect next to it); Cursor runs the sign-in and holds it. If your `~/.cursor/mcp.json` or the project's `.cursor/mcp.json` already has Mnemoverse, the extension doesn't add a second copy. |
-| **Kiro, Windsurf / Devin Desktop, Trae, Antigravity** | These editors don't let extensions add MCP servers yet. The extension says so and offers **Copy MCP config**: a snippet for the hosted server, with the name of the config file to paste it into. It doesn't write any config file. |
+| **Kiro, Windsurf / Devin Desktop, Trae, Antigravity** | These editors don't let extensions add MCP servers yet. The extension says so and offers **Copy MCP config**: a snippet for the hosted server, with the name of the config file to paste it into. It doesn't write any config file. It reads the file (Kiro, Windsurf / Devin Desktop, Antigravity) to notice when Mnemoverse is already there. **Antigravity:** Mnemoverse doesn't accept Antigravity's sign-in yet, so memory can't be connected there for now; the [setup guide](https://mnemoverse.com/docs/api/editors) has the current status. |
 
-The status bar item (**Mnemoverse**) shows what happened in your editor: Connected, Sign in, Added to Cursor, or Set up needed. **Mnemoverse: Show Log** has the details.
+The status bar item (**Mnemoverse**) shows what happened in your editor: **Connected** (local server, signed in), **Sign in**, **Node.js needed**, **Added to _editor_** (the server is added and the editor runs its own sign-in: Cursor, or the hosted connection), **In your MCP config** (you added Mnemoverse to the editor's config yourself), or **Set up needed**. **Mnemoverse: Show Log** has the details.
 
 If you use a different client, install Mnemoverse there directly — the memory is the same account, the setup is different:
 
@@ -32,7 +32,8 @@ If you use a different client, install Mnemoverse there directly — the memory 
 | **VS Code + Copilot Chat** | Agent Mode | **This extension** (1-click from Marketplace) |
 | **VS Code + Copilot Chat** | Ask / Edit Mode | Not supported — MCP servers only run in Agent Mode |
 | **Cursor** | built-in chat | **This extension** (from Open VSX), or the [`.cursor/mcp.json` snippet](https://mnemoverse.com/docs/api/editors) — not both |
-| **Windsurf / Devin Desktop, Kiro, Trae, Antigravity** | built-in chat | **Mnemoverse: Copy MCP Config** in this extension, or the [setup guide](https://mnemoverse.com/docs/api/editors) |
+| **Windsurf / Devin Desktop, Kiro, Trae** | built-in chat | **Mnemoverse: Copy MCP Config** in this extension, or the [setup guide](https://mnemoverse.com/docs/api/editors) |
+| **Antigravity** | built-in chat | Not yet: Mnemoverse doesn't accept Antigravity's sign-in. See the [setup guide](https://mnemoverse.com/docs/api/editors) for the current status |
 | **Claude Code** | CLI | [`claude mcp add` one-liner](https://mnemoverse.com/docs/api/claude) |
 | **Claude Desktop** | app | [`claude_desktop_config.json` snippet](https://mnemoverse.com/docs/api/claude) |
 | **ChatGPT** | Custom GPT | [GPT Actions + OAuth](https://mnemoverse.com/docs/api/chatgpt) |
@@ -43,9 +44,9 @@ Write a memory in any of the tools above → read it from any other. **Same Mnem
 ## Requirements
 
 - **VS Code 1.102** or newer — required for the `registerMcpServerDefinitionProvider` API this extension uses (other editors: see [Scope](#scope-honest))
-- **GitHub Copilot Chat** extension installed and signed in
+- **GitHub Copilot Chat** installed and signed in — in VS Code only; other editors use their own agent (see [Scope](#scope-honest))
 - A free **Mnemoverse account** — sign up at [console.mnemoverse.com](https://console.mnemoverse.com), no credit card (you connect from VS Code in one click — no key to copy or paste)
-- **Node.js 18+** on your PATH — only for the default **local** connection, where the extension runs the memory server with `npx`. The **hosted** connection (setting `mnemoverse.connection: hosted`) and Cursor need no Node.js. If `npx` is missing, the extension says so and offers to switch to the hosted connection.
+- **Node.js 18+** on your PATH — only for the default **local** connection, where the extension runs the memory server with `npx`. The **hosted** connection (setting `mnemoverse.connection: hosted`) and Cursor need no Node.js. If `npx` is missing, the extension says so before Sign In opens the browser, and offers to switch to the hosted connection.
 
 ## Install
 
@@ -57,15 +58,15 @@ If your browser can't return you to VS Code automatically (some remote/SSH setup
 
 ## Try it
 
-In a Copilot Chat Agent Mode session:
+In a Copilot Chat Agent Mode session, tell the agent something true, with today's date (**Mnemoverse: Try It in Chat** fills it in):
 
-> Remember that I prefer Railway for deployments.
+> Remember that I set up Mnemoverse memory in VS Code on 2026-09-23.
 
 Open a **new chat** and ask:
 
-> Where should I deploy this?
+> When and where did I set up Mnemoverse memory?
 
-If Copilot recalls Railway, everything is wired up. The memory persists across sessions, machines with the same account, and every other Mnemoverse-connected tool.
+If Copilot answers with that date and VS Code, everything is wired up. The memory persists across sessions, machines with the same account, and every other Mnemoverse-connected tool.
 
 ## Tools exposed to the agent
 
@@ -86,10 +87,10 @@ For the complete current tool list, see the [server README](https://github.com/m
 
 | Command | What it does |
 | ------- | ------------ |
-| `Mnemoverse: Sign In` | Connect your memory via the browser — no key to paste. The default for the local connection. In Cursor it explains Cursor's own sign-in; in editors that need a config entry it offers **Copy config**. |
+| `Mnemoverse: Sign In` | Connect your memory via the browser — no key to paste. The default for the local connection. Without Node.js it says so first and offers the hosted connection. Where the console doesn't accept the editor (Positron, Theia, VSCodium Insiders) it offers **Set API Key** instead. In Cursor it explains Cursor's own sign-in; in editors that need a config entry it offers **Copy config**. |
 | `Mnemoverse: Complete sign-in` | Finish a Sign In when the browser couldn't return automatically — paste the code from the page. |
-| `Mnemoverse: Sign Out` | Forget the stored key on this device. The key stays valid until you revoke it in the [console](https://console.mnemoverse.com). |
-| `Mnemoverse: Set API Key (paste manually)` | Fallback: paste a key directly. It replaces the stored key only when you enter a valid one; cancelling keeps the current key. |
+| `Mnemoverse: Sign Out` | Local connection: forget the stored key on this device. The key stays valid until you revoke it in the [console](https://console.mnemoverse.com). Hosted connection, Cursor and config-file editors: the editor holds the sign-in, so the command removes any key the extension stored and tells you where the editor's own sign-out is (VS Code: **MCP: List Servers** → Mnemoverse Memory → Sign Out; Cursor: **Cursor Settings → Tools & MCPs** → Logout). |
+| `Mnemoverse: Set API Key (paste manually)` | Fallback: paste a key directly (VS Code-family editors; Cursor and config-file editors don't use a key, and the command says so). It replaces the stored key only when you enter a valid one; cancelling keeps the current key. |
 | `Mnemoverse: Clear API Key` | Remove the stored key. The local server won't start until you reconnect. |
 | `Mnemoverse: Copy MCP Config` | Copy a config snippet for the hosted server (`https://mcp.mnemoverse.com/mcp`) in your editor's format, and show which file it goes in. The snippet contains no key. |
 | `Mnemoverse: Open MCP Settings` | Open the place where your editor manages MCP servers (Cursor Settings → Tools & MCPs, or VS Code's **MCP: List Servers**). |
@@ -105,7 +106,7 @@ For the complete current tool list, see the [server README](https://github.com/m
 
 | Setting | Default | What it does |
 | ------- | ------- | ------------ |
-| `mnemoverse.connection` | `local` | `local`: run the server on this machine with `npx` (Node.js 18+) and the key from **Sign In**, kept in the OS keychain. `hosted`: use `https://mcp.mnemoverse.com/mcp`; the editor signs you in through the browser the first time the agent uses memory, and the extension stores no key. Applies in editors that use VS Code's MCP API; Cursor and the config-file editors always use the hosted server. |
+| `mnemoverse.connection` | `local` | `local`: run the server on this machine with `npx` (Node.js 18+) and the key from **Sign In**, kept in the OS keychain. `hosted`: use `https://mcp.mnemoverse.com/mcp`; the editor signs you in through the browser the first time the agent uses memory, and the extension doesn't need or send a key. Applies in editors that use VS Code's MCP API; Cursor and the config-file editors always use the hosted server. |
 | `mnemoverse.showStatusBar` | `true` | Show the **Mnemoverse** item in the status bar. |
 
 ## How it works (internals)
@@ -121,8 +122,8 @@ With `mnemoverse.connection` set to `hosted`, the provider returns an HTTP serve
 ## Privacy and security
 
 - Your API key is stored only in `vscode.SecretStorage` (OS keychain — macOS Keychain, Windows Credential Vault, Linux libsecret). Never on disk, never in settings.json, never in git.
-- With the hosted connection, and in Cursor, the extension stores no key at all: the editor holds the OAuth sign-in.
-- The extension only reads Cursor's `mcp.json` files (to avoid adding Mnemoverse twice); it never writes any editor config file.
+- With the hosted connection, and in Cursor, the extension doesn't need or send a key: the editor holds the OAuth sign-in. A key stored earlier (for the local connection, or by version 0.2 in Cursor) stays in the keychain until you run **Sign Out** or **Clear API Key**; on the hosted connection the status bar menu offers **Remove stored key**.
+- The extension only reads MCP config files: Cursor's `mcp.json` files (to avoid adding Mnemoverse twice) and the Kiro, Windsurf and Antigravity config (to see whether you already added it). It counts only an entry for `https://mcp.mnemoverse.com` or the `@mnemoverse/mcp-memory-server` package run through npx (or pnpm, yarn, bun), and it skips files that are large, not regular files, or, inside a workspace, symlinks. It never writes any MCP config file; the connection commands change only the `mnemoverse.connection` setting.
 - The extension contains zero telemetry of its own.
 - Memory content is sent to `core.mnemoverse.com` over HTTPS. See the [Mnemoverse privacy policy](https://mnemoverse.com/legal/privacy-policy) for what is stored and for how long.
 - Capabilities declared in `package.json`: `untrustedWorkspaces: false` (we spawn `npx`, which runs arbitrary third-party code), `virtualWorkspaces: false` (we need a local Node.js runtime).
