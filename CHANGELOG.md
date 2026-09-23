@@ -4,6 +4,13 @@ All notable changes to the Mnemoverse Memory extension for VS Code.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- README: a "From the author" section replaces "Feedback": why the extension
+  exists, and the same rating, star and issue links.
+
 ## [0.3.0] — 2026-09-23
 
 Support for the editors that install the extension from Open VSX, not only
