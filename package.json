@@ -1,52 +1,53 @@
 {
   "name": "mnemoverse-vscode",
-  "displayName": "Mnemoverse Memory",
-  "description": "Persistent memory for GitHub Copilot agent mode that learns from outcomes, with shared rooms. The same memory follows you across Claude, Cursor and ChatGPT — sign in once in the browser.",
-  "version": "0.2.1",
+  "displayName": "Mnemoverse Agent Memory",
+  "description": "Persistent memory for GitHub Copilot agent mode and Cursor that learns from outcomes, with shared rooms. Browser sign-in, no key to paste. The same memory works in Claude, ChatGPT and other MCP clients.",
+  "version": "0.3.0",
   "publisher": "Mnemoverse",
-  "preview": true,
   "pricing": "Free",
   "license": "MIT",
-  "homepage": "https://mnemoverse.com/docs/api/mcp-server",
+  "homepage": "https://mnemoverse.com/docs/api/vs-code",
   "bugs": {
     "url": "https://github.com/mnemoverse/mnemoverse-vscode/issues"
   },
+  "qna": "https://github.com/mnemoverse/mnemoverse-vscode/issues",
   "repository": {
     "type": "git",
     "url": "https://github.com/mnemoverse/mnemoverse-vscode.git"
-  },
-  "sponsor": {
-    "url": "https://github.com/sponsors/mnemoverse"
   },
   "engines": {
     "vscode": "^1.102.0"
   },
   "categories": [
     "AI",
-    "Chat",
-    "Other"
+    "Chat"
   ],
   "keywords": [
-    "mcp",
     "memory",
-    "ai",
-    "ai-agent",
+    "ai-memory",
+    "agent-memory",
+    "persistent-memory",
+    "long-term-memory",
+    "copilot-memory",
+    "mcp-memory",
+    "shared-memory",
+    "chat-memory",
+    "memory-bank",
+    "remember",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
     "copilot",
+    "github-copilot",
     "copilot-chat",
     "agent-mode",
-    "mnemoverse",
-    "persistent-memory",
-    "shared-memory",
-    "cross-tool",
-    "model-context-protocol",
-    "mcp-server",
-    "github-copilot",
-    "long-term-memory",
-    "agent-memory",
-    "claude",
     "cursor",
+    "ai",
+    "ai-agent",
+    "claude",
     "chatgpt",
-    "memory-rooms"
+    "mnemoverse",
+    "cross-tool"
   ],
   "icon": "icon.png",
   "galleryBanner": {
@@ -108,6 +109,183 @@
         "command": "mnemoverse.openDocs",
         "title": "Open Documentation",
         "category": "Mnemoverse"
+      },
+      {
+        "command": "mnemoverse.copyMcpConfig",
+        "title": "Copy MCP Config",
+        "category": "Mnemoverse"
+      },
+      {
+        "command": "mnemoverse.openMcpSettings",
+        "title": "Open MCP Settings",
+        "category": "Mnemoverse"
+      },
+      {
+        "command": "mnemoverse.addToCursor",
+        "title": "Add to Cursor (all windows)",
+        "category": "Mnemoverse"
+      },
+      {
+        "command": "mnemoverse.useHostedConnection",
+        "title": "Use Hosted Connection (no Node.js)",
+        "category": "Mnemoverse"
+      },
+      {
+        "command": "mnemoverse.useLocalConnection",
+        "title": "Use Local Connection (npx)",
+        "category": "Mnemoverse"
+      },
+      {
+        "command": "mnemoverse.getStarted",
+        "title": "Get Started",
+        "category": "Mnemoverse"
+      },
+      {
+        "command": "mnemoverse.tryIt",
+        "title": "Try It in Chat",
+        "category": "Mnemoverse"
+      },
+      {
+        "command": "mnemoverse.showMenu",
+        "title": "Show Menu",
+        "category": "Mnemoverse"
+      },
+      {
+        "command": "mnemoverse.showLog",
+        "title": "Show Log",
+        "category": "Mnemoverse"
+      },
+      {
+        "command": "mnemoverse.rate",
+        "title": "Rate Mnemoverse",
+        "category": "Mnemoverse"
+      },
+      {
+        "command": "mnemoverse.starOnGitHub",
+        "title": "Star on GitHub",
+        "category": "Mnemoverse"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "mnemoverse.setApiKey",
+          "when": "!mnemoverse.host || mnemoverse.host == lm"
+        },
+        {
+          "command": "mnemoverse.clearApiKey",
+          "when": "!mnemoverse.host || mnemoverse.host == lm"
+        },
+        {
+          "command": "mnemoverse.useHostedConnection",
+          "when": "mnemoverse.host == lm && config.mnemoverse.connection != hosted"
+        },
+        {
+          "command": "mnemoverse.useLocalConnection",
+          "when": "mnemoverse.host == lm && config.mnemoverse.connection == hosted"
+        },
+        {
+          "command": "mnemoverse.addToCursor",
+          "when": "mnemoverse.host == cursor"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Mnemoverse",
+      "properties": {
+        "mnemoverse.connection": {
+          "type": "string",
+          "enum": [
+            "local",
+            "hosted"
+          ],
+          "enumDescriptions": [
+            "Run the memory server on this machine with npx (needs Node.js 18+). Connect with \"Mnemoverse: Sign In\"; the key is kept in the OS keychain.",
+            "Use the hosted server at https://mcp.mnemoverse.com/mcp. The editor signs you in through the browser the first time the agent uses memory. No Node.js, and no key is needed."
+          ],
+          "default": "local",
+          "scope": "application",
+          "markdownDescription": "How Mnemoverse connects in editors that support VS Code's MCP server API (VS Code, VSCodium, Positron, Theia). Cursor and other editors always use the hosted server."
+        },
+        "mnemoverse.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the Mnemoverse item in the status bar."
+        }
+      }
+    },
+    "walkthroughs": [
+      {
+        "id": "mnemoverse.getStarted",
+        "title": "Get started with Mnemoverse Agent Memory",
+        "description": "Connect long-term memory to your editor's agent, check that it works, and share it through a room.",
+        "steps": [
+          {
+            "id": "connect.lm",
+            "title": "Connect your memory",
+            "description": "Sign in through the browser; there is no key to copy. The agent in this editor then gets long-term memory tools.\n[Sign In](command:mnemoverse.signIn)\nNo Node.js on this machine? [Use the hosted connection](command:mnemoverse.useHostedConnection) instead.\nPositron, Theia and VSCodium Insiders can't use the browser sign-in yet: [paste a key](command:mnemoverse.setApiKey) from the console instead.",
+            "media": {
+              "markdown": "media/walkthrough/connect-lm.md"
+            },
+            "completionEvents": [
+              "onContext:mnemoverse.connected"
+            ],
+            "when": "mnemoverse.host == lm || !mnemoverse.host"
+          },
+          {
+            "id": "connect.cursor",
+            "title": "Add Mnemoverse to Cursor and sign in",
+            "description": "Add Mnemoverse to your Cursor MCP settings so every window can use it, including the Agents Window, which runs no extensions. Then click Connect next to it; Cursor signs you in through the browser.\n[Add to Cursor (all windows)](command:mnemoverse.addToCursor)\n[Open MCP settings](command:mnemoverse.openMcpSettings)",
+            "media": {
+              "markdown": "media/walkthrough/connect-cursor.md"
+            },
+            "completionEvents": [
+              "onCommand:mnemoverse.addToCursor",
+              "onCommand:mnemoverse.openMcpSettings"
+            ],
+            "when": "mnemoverse.host == cursor"
+          },
+          {
+            "id": "connect.guidance",
+            "title": "Add Mnemoverse to your editor's MCP config",
+            "description": "The extension can't add Mnemoverse to this editor's agent by itself (\"Mnemoverse: Show Log\" says why). Copy a ready config for Mnemoverse's hosted server and paste it into the editor's MCP config file.\n[Copy config](command:mnemoverse.copyMcpConfig)",
+            "media": {
+              "markdown": "media/walkthrough/connect-guidance.md"
+            },
+            "completionEvents": [
+              "onCommand:mnemoverse.copyMcpConfig"
+            ],
+            "when": "mnemoverse.host == guidance"
+          },
+          {
+            "id": "tryIt",
+            "title": "Try it",
+            "description": "Ask the agent to remember when and where you set up memory, then ask about it in a new chat.\n[Try it](command:mnemoverse.tryIt)",
+            "media": {
+              "markdown": "media/walkthrough/try-it.md"
+            },
+            "completionEvents": [
+              "onCommand:mnemoverse.tryIt"
+            ]
+          },
+          {
+            "id": "shareRoom",
+            "title": "Share memory through a room",
+            "description": "A room is a memory pool you share with other people and agents (Beta). Ask the agent to create one and invite a teammate.\n[Read the docs](https://mnemoverse.com/docs)",
+            "media": {
+              "markdown": "media/walkthrough/share-room.md"
+            },
+            "completionEvents": [
+              "onLink:https://mnemoverse.com/docs"
+            ]
+          }
+        ]
+      }
+    ],
+    "chatSkills": [
+      {
+        "path": "./skills/mnemoverse-memory/SKILL.md",
+        "when": "mnemoverse.connected"
       }
     ]
   },

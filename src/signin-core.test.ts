@@ -11,6 +11,7 @@ import {
   parseExchangeResponse,
   SIGN_IN_REQUIRED_MESSAGE,
   decideShowWelcome,
+  isWellFormedState,
 } from "./signin-core";
 
 describe("base64urlEncode", () => {
@@ -131,5 +132,19 @@ describe("decideShowWelcome — once ever, only unconnected, never double with t
   });
   it("suppresses when the agent-touch toast already fired this session (no double)", () => {
     expect(decideShowWelcome(false, false, true)).toBe(false);
+  });
+});
+
+describe("isWellFormedState — late-callback gate", () => {
+  it("accepts exactly what generateState produces", () => {
+    expect(isWellFormedState(generateState())).toBe(true);
+  });
+
+  it("rejects anything else (empty, short, long, non-base64url)", () => {
+    expect(isWellFormedState("")).toBe(false);
+    expect(isWellFormedState("abc")).toBe(false);
+    expect(isWellFormedState("a".repeat(44))).toBe(false);
+    expect(isWellFormedState("a".repeat(42) + "=")).toBe(false);
+    expect(isWellFormedState("<script>alert(1)</script>".padEnd(43, "x"))).toBe(false);
   });
 });

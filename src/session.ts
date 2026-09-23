@@ -10,6 +10,14 @@
  */
 let connectPromptShownThisSession = false;
 
+/**
+ * Whether ANY onboarding toast (welcome, connect, Cursor intro, guidance, Node
+ * missing) was shown this session. The rating prompt reads it: asking for a
+ * review in the same window that just asked the user to set something up reads
+ * as nagging, so the rating waits for a quieter session.
+ */
+let onboardingToastThisSession = false;
+
 /** Whether a connect toast has already been shown (or claimed) this session. */
 export function wasConnectPromptShown(): boolean {
   return connectPromptShownThisSession;
@@ -27,7 +35,18 @@ export function claimConnectPrompt(): boolean {
     return false;
   }
   connectPromptShownThisSession = true;
+  onboardingToastThisSession = true;
   return true;
+}
+
+/** Record that an onboarding toast (of any kind) was shown this session. */
+export function noteOnboardingToast(): void {
+  onboardingToastThisSession = true;
+}
+
+/** Whether an onboarding toast was shown this session (see `noteOnboardingToast`). */
+export function hadOnboardingToastThisSession(): boolean {
+  return onboardingToastThisSession;
 }
 
 /**
