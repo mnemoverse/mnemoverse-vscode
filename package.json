@@ -299,11 +299,11 @@
     "check:package": "node scripts/check-package.mjs"
   },
   "devDependencies": {
-    "@types/node": "^20.19.0",
+    "@types/node": "^20.19.43",
     "@types/vscode": "^1.102.0",
     "@vscode/vsce": "^4.0.0",
     "ovsx": "^1.2.0",
-    "typescript": "^5.6.0",
-    "vitest": "^4.1.11"
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
   }
 }
