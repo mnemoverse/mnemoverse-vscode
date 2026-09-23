@@ -1,8 +1,8 @@
 {
   "name": "mnemoverse-vscode",
   "displayName": "Mnemoverse Memory",
-  "description": "Persistent memory for GitHub Copilot Chat Agent Mode. Your memories sync across Claude, Cursor, ChatGPT, and other Mnemoverse-connected tools.",
-  "version": "0.2.0",
+  "description": "Persistent memory for GitHub Copilot agent mode that learns from outcomes, with shared rooms. The same memory follows you across Claude, Cursor and ChatGPT — sign in once in the browser.",
+  "version": "0.2.1",
   "publisher": "Mnemoverse",
   "preview": true,
   "pricing": "Free",
@@ -38,7 +38,15 @@
     "persistent-memory",
     "shared-memory",
     "cross-tool",
-    "model-context-protocol"
+    "model-context-protocol",
+    "mcp-server",
+    "github-copilot",
+    "long-term-memory",
+    "agent-memory",
+    "claude",
+    "cursor",
+    "chatgpt",
+    "memory-rooms"
   ],
   "icon": "icon.png",
   "galleryBanner": {

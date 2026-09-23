@@ -4,6 +4,25 @@ All notable changes to the Mnemoverse Memory extension for VS Code.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] — 2026-09-23
+
+Listing text only: the extension, its commands and its sign-in are unchanged.
+
+### Changed
+
+- **Marketplace and Open VSX description** now matches the product: memory that
+  learns from outcomes (feedback re-ranks recall), with shared rooms, the same
+  memory across Claude, Cursor and ChatGPT, one browser sign-in. The June text
+  named only Copilot and said nothing about outcomes or rooms.
+- **Keywords** add `mcp-server`, `github-copilot`, `long-term-memory`,
+  `agent-memory`, `claude`, `cursor`, `chatgpt` and `memory-rooms`, the terms
+  people search the Marketplace by.
+- **README**: the tool table no longer lists `memory_delete` and
+  `memory_delete_domain` (deletion is an administrative REST operation, not a
+  tool of the server this extension launches) and drops the fixed "six tools";
+  it adds `memory_list_recent` and the four room tools, and links the server's
+  complete tool list.
+
 ## [0.2.0] — 2026-06-12
 
 Keyless browser sign-in. First-run is now **install → "Mnemoverse: Sign In" →

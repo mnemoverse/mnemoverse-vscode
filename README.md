@@ -1,6 +1,6 @@
 # Mnemoverse Memory for VS Code
 
-> Persistent memory for GitHub Copilot Chat Agent Mode — one memory, every AI tool.
+> Persistent memory for GitHub Copilot Chat Agent Mode that learns from outcomes, with shared rooms — one memory across every AI tool you connect.
 
 [![VS Code Marketplace](https://vsmarketplacebadges.dev/version-short/Mnemoverse.mnemoverse-vscode.svg)](https://marketplace.visualstudio.com/items?itemName=Mnemoverse.mnemoverse-vscode)
 [![Open VSX](https://img.shields.io/open-vsx/v/mnemoverse/mnemoverse-vscode?label=Open%20VSX&color=c160ef)](https://open-vsx.org/extension/mnemoverse/mnemoverse-vscode)
@@ -10,7 +10,7 @@
 
 ## What this extension does
 
-**Adds Mnemoverse Memory as an MCP server inside GitHub Copilot Chat's Agent Mode**, with no `.vscode/mcp.json` file to edit and no JSON config to commit. Once installed and connected, your Copilot agent gains six tools for long-term memory: it can store facts, preferences, and decisions during one chat and recall them from any future chat — across sessions, branches, and projects.
+**Adds Mnemoverse Memory as an MCP server inside GitHub Copilot Chat's Agent Mode**, with no `.vscode/mcp.json` file to edit and no JSON config to commit. Once installed and connected, your Copilot agent gains tools for long-term memory: it can store facts, preferences, and decisions during one chat and recall them from any future chat — across sessions, branches, and projects.
 
 ### Scope (honest)
 
@@ -60,14 +60,18 @@ If Copilot recalls Railway, everything is wired up. The memory persists across s
 
 ## Tools exposed to the agent
 
+The extension launches `@mnemoverse/mcp-memory-server@latest` via `npx`. Common tools include:
+
 | Tool | What it does |
 | ---- | ------------ |
 | `memory_write` | Store a preference, decision, or lesson |
 | `memory_read` | Search memories by natural-language query |
 | `memory_feedback` | Rate a memory as helpful or harmful (affects future retrieval) |
 | `memory_stats` | Show total memories, domains, and average importance |
-| `memory_delete` | Permanently delete one memory by id |
-| `memory_delete_domain` | Wipe an entire domain (safety interlocked) |
+| `memory_list_recent` | List the newest memories first, no search query needed |
+| `memory_create_room`, `memory_invite_to_room`, `memory_join_room`, `memory_list_rooms` | Share a memory pool with other agents and people through rooms |
+
+For the complete current tool list, see the [server README](https://github.com/mnemoverse/mcp-memory-server#tools). Memory deletion is an administrative REST operation, not exposed by this MCP server; see the [privacy and deletion policy](https://github.com/mnemoverse/mcp-memory-server#privacy-policy).
 
 ## Commands
 
