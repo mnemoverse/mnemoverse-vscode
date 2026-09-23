@@ -93,14 +93,19 @@ manifest carries the pre-release flag, publishes to both stores with
 
 | Job | Needs | Does | Permissions |
 | --- | --- | --- | --- |
-| `build` | | Resolves the tag (push ref or the `tag` input), requires `vX.Y.Z` / `vX.Y.Z-pre`, checks out the tag with full history, requires the tagged commit to be on `origin/main`, runs `scripts/check-version.mjs --tag` (tag = package.json = lockfile, exact CHANGELOG heading, no duplicate flavour of the version), `npm ci`, compile, test, `check:package` (what `vsce ls` would ship), `vsce package` once, uploads the `vsix` artifact and records its SHA-256. | `contents: read` |
+| `build` | | Resolves the tag (push ref or the `tag` input), requires `vX.Y.Z` / `vX.Y.Z-pre`, checks out the tag with full history, requires the tagged commit to be on `origin/main`, runs `scripts/check-version.mjs --tag` (tag = package.json = lockfile, exact CHANGELOG heading, no duplicate flavour of the version), `npm ci`, compile, test, `check:package` (what `vsce ls` would ship), `vsce package` once. If the tag already has a GitHub release with the `.vsix`, uses that file instead, after checking it has the same contents as the new package. Uploads the `vsix` artifact and records its SHA-256. | `contents: read` |
 | `openvsx` | build | `ovsx publish <vsix> -p $OVSX_PAT --skip-duplicate` (+ `--pre-release`), using the ovsx version locked in `package-lock.json`. | `contents: read` |
 | `marketplace` | build | In environment `marketplace`. With `vars.AZURE_CLIENT_ID` set: `azure/login` (OIDC), then `vsce publish --packagePath <vsix> --azure-credential --skip-duplicate`. Without it: the same with `-p $VSCE_PAT`, plus a deadline warning. | `contents: read`, `id-token: write` |
-| `release` | all three | Runs if `build` succeeded and at least one store job succeeded. Creates or updates the GitHub release with the `.vsix`, its SHA-256, links to both stores and which one published; writes the same to the job summary. | `contents: write` |
+| `release` | all three | Runs if `build` succeeded and at least one store job succeeded. Creates or updates the GitHub release with the `.vsix`, its SHA-256, links to both stores and, per store, whether this run uploaded the file or the store already had the version; writes the same to the job summary. | `contents: write` |
 
 `openvsx` and `marketplace` do not depend on each other: one store failing
-never blocks the other. Both publish the same `.vsix` bytes built once in
-`build`.
+never blocks the other. Both publish the same `.vsix` file from `build`.
+
+`vsce package` is not byte-reproducible: packaging the same commit twice gives
+two different SHA-256 values. That is why `build` publishes the `.vsix`
+already attached to the tag's GitHub release when there is one. Without that, a
+repeat run would upload new bytes to one store while the other store and the
+release kept the old ones.
 
 CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs the same
 gates on every PR and push to main and uploads the `.vsix` as an artifact, so
@@ -115,17 +120,32 @@ VSIX…**).
   commit. Never move a tag once any store has the version; bump instead.
 - **One store failed** (for example an expired token). Fix the cause (rotate the
   secret, finish the Entra setup), then open the run and click **Re-run failed
-  jobs**. `--skip-duplicate` makes the store that already has the version a
-  no-op, the failed store publishes, and the `release` job re-runs and rewrites
-  the release notes with both results. Re-runs use the run's artifact, so the
-  bytes are identical. Artifacts are kept 30 days.
+  jobs**. Only the failed store job and the `release` job run again; the store
+  job that succeeded is not repeated. They use the run's `vsix` artifact, so
+  the failed store gets the same bytes as the other one, and `release`
+  rewrites the notes with both results. Artifacts are kept 30 days. A re-run
+  uses the workflow file of the original run, so a fix to `publish.yml` itself
+  needs a fresh run (next item).
 - **Both stores failed.** The `release` job is skipped. Fix and use **Re-run
   failed jobs** the same way.
 - **Start a fresh run for an existing tag.** **Actions → publish → Run
   workflow**, `tag` = the tag. The workflow file comes from the branch you run
   it from (normally main); everything else comes from the tag. This works for
   tags created after this pipeline landed; older tags lack `.nvmrc` and
-  `scripts/check-version.mjs`.
+  `scripts/check-version.mjs`. `build` packages again, which gives new bytes.
+  If the tag's GitHub release already has the `.vsix`, `build` checks that file
+  has the same contents as the new package and publishes it instead, so both
+  stores and the release keep one SHA-256. If the contents differ, `build`
+  fails: a store may already serve the old file. Find out why before you delete
+  the asset from the release to force a fresh build. **Re-run all jobs**
+  behaves the same way.
+- **`--skip-duplicate`.** Both publish commands use it. It matters in two cases:
+  a store job that failed after the store had already accepted the upload, and
+  a fresh run for a tag that a store already has. The store then reports
+  success without uploading. The store job records that, and the release notes
+  show "already had X.Y.Z; not uploaded again" for that store instead of
+  "published". If no release existed to reuse a `.vsix` from, the notes also
+  say that the store's copy may not be byte-identical to the attached file.
 
 ## Secrets and variables
 
