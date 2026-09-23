@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://mnemoverse.com/docs/api/vs-code
+    about: Setup, sign-in and troubleshooting for the VS Code extension.
+  - name: Report a security vulnerability
+    url: https://github.com/mnemoverse/mnemoverse-vscode/security/advisories/new
+    about: Private security advisory. Please do not open a public issue for vulnerabilities.
