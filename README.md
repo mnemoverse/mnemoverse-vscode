@@ -74,19 +74,7 @@ The status bar item (**Mnemoverse**) shows what happened in your editor: **Conne
 
 ## Tools the agent gets
 
-The local connection runs [`@mnemoverse/mcp-memory-server`](https://github.com/mnemoverse/mcp-memory-server) with `npx`; the hosted connection and Cursor use `https://mcp.mnemoverse.com/mcp`. Both give the agent these tools:
-
-| Tool | What it does |
-| ---- | ------------ |
-| `memory_write` | Store a preference, decision or lesson |
-| `memory_read` | Search memories with a natural-language query |
-| `memory_list_recent` | List the newest memories first, no search query needed |
-| `memory_feedback` | Rate a memory as helpful or harmful; the rating changes how it ranks later |
-| `memory_stats` | Show how many memories are stored, which domains exist, and average valence and importance |
-| `memory_create_room`, `memory_invite_to_room`, `memory_join_room`, `memory_list_rooms` | Share a memory pool with other agents and people through rooms (Beta) |
-| `vault_list` | List your Vault secrets by alias and purpose; the value is never returned |
-
-The [server README](https://github.com/mnemoverse/mcp-memory-server#tools) has the full reference. Deleting memories is an administrative REST operation, not a tool; see the [privacy and deletion policy](https://github.com/mnemoverse/mcp-memory-server#privacy-policy).
+The local connection runs [`@mnemoverse/mcp-memory-server`](https://github.com/mnemoverse/mcp-memory-server) with `npx`; the hosted connection and Cursor use `https://mcp.mnemoverse.com/mcp`. Both give the agent the same memory tools: storing and searching memories, a newest-first listing, usefulness feedback that changes ranking, stats, shared rooms (Beta) and a Vault alias listing (values are never returned). This README does not copy the list, so it cannot fall behind a release: the tools the hosted server serves right now, with descriptions and schemas, are at [its server card](https://mcp.mnemoverse.com/.well-known/mcp/server-card.json), and the [server README](https://github.com/mnemoverse/mcp-memory-server#tools) has the full reference for the local package. Deleting memories is an administrative REST operation, not a tool; see the [privacy and deletion policy](https://github.com/mnemoverse/mcp-memory-server#privacy-policy).
 
 ## Other clients
 
