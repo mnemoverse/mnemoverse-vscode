@@ -27,7 +27,7 @@ import { log } from "./log";
  * Every sign-in sentence follows the host's `signIn` status in hosts.ts: the
  * extension promises a browser sign-in only where auth.mnemoverse.com is known
  * to accept the editor's redirect, hedges where that is unverified, and says
- * plainly where it is refused today (Antigravity).
+ * plainly where it is refused (no editor is marked refused today).
  */
 
 const GUIDANCE_SHOWN_KEY = "mnemoverse.guidanceShown";

@@ -173,7 +173,7 @@ export function isKnownSetUp(): boolean {
       return snap.configuredIn !== undefined;
     case "guidance":
       // An entry in the config is not a working setup where Mnemoverse refuses
-      // the editor's sign-in (Antigravity today): no rating prompt there.
+      // the editor's sign-in (`not-accepted`): no rating prompt there.
       return snap.configuredIn !== undefined && mcpConfigTargetFor(snap.host.id).signIn !== "not-accepted";
   }
 }

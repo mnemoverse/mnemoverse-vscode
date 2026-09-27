@@ -82,7 +82,7 @@ export function buildMenuItems(): MenuItem[] {
       items.push(commandItem("$(sign-in) Open MCP settings to sign in", "mnemoverse.openMcpSettings"));
       break;
     case "guidance":
-      // Where the editor's sign-in is refused today (Antigravity), a config
+      // Where the editor's sign-in is refused (`not-accepted`), a config
       // entry cannot connect yet; lead with the guide, which has the status.
       if (mcpConfigTargetFor(host.id).signIn !== "not-accepted") {
         items.push(commandItem("$(clippy) Copy MCP config", "mnemoverse.copyMcpConfig", `For ${appName()}'s MCP config file`));

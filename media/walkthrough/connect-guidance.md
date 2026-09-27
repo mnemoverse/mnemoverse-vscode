@@ -14,7 +14,7 @@ Some editors (Kiro, Windsurf / Devin Desktop, Trae, Antigravity and others) read
 }
 ```
 
-The snippet contains no key. When the editor first connects, it should sign you in to the hosted server through the browser. That is checked for Kiro; for Windsurf / Devin Desktop and Trae, see the setup guide if no browser window opens. Antigravity is the exception for now: Mnemoverse doesn't accept Antigravity's sign-in yet, and the setup guide has the current status. Antigravity also needs a **Refresh** in its MCP server list (or a restart) after you save the file.
+The snippet contains no key. When the editor first connects, it should sign you in to the hosted server through the browser. That is checked for Kiro; for Windsurf / Devin Desktop, Trae and Antigravity, see the setup guide if no browser window opens. Antigravity also needs a **Refresh** in its MCP server list (or a restart) after you save the file.
 
 Once the entry is in the file, the extension notices it on the next start (for Kiro, Windsurf / Devin Desktop and Antigravity) and shows **In your MCP config** instead of **Set up needed**.
 

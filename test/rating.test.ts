@@ -124,9 +124,9 @@ describe("rating prompt (glue)", () => {
     expect(vscode.__state.messages.at(-1)!.message).toContain("A rating on Open VSX");
   });
 
-  // Review (Copilot): an entry in Antigravity's config cannot sign in today
-  // (its redirect is not accepted), so it is not a working setup to ask about.
-  it("Antigravity: never asks, even with Mnemoverse in its config", async () => {
+  // Antigravity's redirect is allowlisted (mnemoverse-chat#2125), so an entry in
+  // its config counts as set up, the same as the other hedged editors.
+  it("Antigravity: asks once Mnemoverse is in its config", async () => {
     fs.mkdirSync(path.join(home, ".gemini", "config"), { recursive: true });
     fs.writeFileSync(
       path.join(home, ".gemini", "config", "mcp_config.json"),
@@ -138,7 +138,7 @@ describe("rating prompt (glue)", () => {
     await ext.activate(ctx as never);
     await flush();
     const rating = await import("../src/rating");
-    expect(await rating.maybeAskForRating(ctx as never)).toBe(false);
+    expect(await rating.maybeAskForRating(ctx as never)).toBe(true);
   });
 
   it("fires from the ~3-minute timer after activation, and the timer dies with the extension", async () => {
