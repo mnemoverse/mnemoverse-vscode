@@ -182,7 +182,9 @@ export interface McpConfigTarget {
    * allowlist: loopback, vscode.dev, cursor://anysphere.cursor-mcp/, ...).
    *
    *   - `accepted`     — checked against the allowlist.
-   *   - `unverified`   — the editor's redirect is not known; the text hedges.
+   *   - `unverified`   — the editor's redirect is not known, or it is on the
+   *                      allowlist but a sign-in from the editor has not been
+   *                      checked live yet; the text hedges.
    *   - `not-accepted` — known to be refused today; the text says so rather
    *                      than promising a browser sign-in that will fail.
    */
@@ -260,17 +262,19 @@ const MCP_CONFIG_TARGETS: Readonly<Partial<Record<HostId, McpConfigTarget>>> = {
   },
   // antigravity.google/docs/mcp: global file ~/.gemini/config/mcp_config.json,
   // remote servers need `serverUrl` ("url" is not supported), and the IDE's MCP
-  // list has a Refresh button. Its OAuth redirect
-  // (https://antigravity.google/oauth-callback) is NOT on auth.mnemoverse.com's
-  // dynamic-registration allowlist (REGISTRATION_ALLOWED_REDIRECT_HOSTS in the
-  // auth service), so the sign-in is refused until the owner admits it. Flip
-  // `signIn` to "accepted" in the same change that allowlists it.
+  // list has a Refresh button. Its OAuth redirect,
+  // https://antigravity.google/oauth-callback (the only redirect_uri in its
+  // published client metadata, antigravity.google/oauth/client-metadata.json),
+  // is on auth.mnemoverse.com's dynamic-registration allowlist since
+  // mnemoverse-chat#2125 (REGISTRATION_EXACT_REDIRECT_HOSTS in the auth
+  // service, deployed 2026-09-24). A sign-in from Antigravity has not been
+  // checked live yet, so the text hedges; flip `signIn` to "accepted" once it has.
   antigravity: {
     file: "~/.gemini/config/mcp_config.json",
     rootKey: "mcpServers",
     urlField: "serverUrl",
     homePaths: [".gemini/config/mcp_config.json"],
-    signIn: "not-accepted",
+    signIn: "unverified",
     afterSave: "click Refresh in Antigravity's MCP server list (or restart Antigravity)",
   },
   // UNVERIFIED: Trae's file location and field name come from third-party

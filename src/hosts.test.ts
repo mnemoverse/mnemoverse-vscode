@@ -262,9 +262,9 @@ describe("config targets — sign-in status and checkable paths", () => {
     expect(mcpConfigTargetFor("kiro").signIn).toBe("accepted");
     expect(mcpConfigTargetFor("cursor").signIn).toBe("accepted");
     expect(mcpConfigTargetFor("vscode").signIn).toBe("accepted");
-    // antigravity.google/oauth-callback is not on the DCR allowlist.
-    expect(mcpConfigTargetFor("antigravity").signIn).toBe("not-accepted");
-    for (const host of ["windsurf", "devin", "trae", "unknown"] as const) {
+    // antigravity.google/oauth-callback is on the DCR allowlist (mnemoverse-chat
+    // #2125) but an Antigravity sign-in has not been checked live: hedged.
+    for (const host of ["windsurf", "devin", "trae", "antigravity", "unknown"] as const) {
       expect(mcpConfigTargetFor(host).signIn, host).toBe("unverified");
     }
   });

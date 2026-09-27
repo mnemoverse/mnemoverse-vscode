@@ -6,6 +6,15 @@ and versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Antigravity: the extension no longer says Mnemoverse refuses Antigravity's
+  sign-in. Its callback, `https://antigravity.google/oauth-callback`, is on
+  auth.mnemoverse.com's registration allowlist since 2026-09-24, so Antigravity
+  now gets **Copy config** like Windsurf / Devin Desktop and Trae, with the same
+  hedged sign-in sentence: a sign-in from Antigravity has not been checked end
+  to end yet.
+
 ### Changed
 
 - README: a "From the author" section replaces "Feedback": why the extension

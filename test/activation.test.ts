@@ -460,22 +460,24 @@ describe("guidance hosts: Copy MCP config", () => {
     expect(copied?.message).toContain("should open the browser");
   });
 
-  it("Antigravity: says its sign-in isn't accepted yet instead of promising one", async () => {
+  it("Antigravity: offers the snippet with a hedged sign-in (allowlisted, not checked live)", async () => {
     const { vscode, ext } = await load();
     vscode.__setHost({ appName: "Antigravity", uriScheme: "antigravity" });
     await ext.activate(vscode.__makeContext() as never);
     await flush();
     const intro = vscode.__state.messages[0];
-    expect(intro.message).toContain("Mnemoverse doesn't accept Antigravity's sign-in yet");
-    expect(intro.items).toEqual(["Open guide"]);
+    expect(intro.message).not.toContain("doesn't accept");
+    expect(intro.items).toEqual(["Copy config", "Open guide"]);
 
     vscode.__state.messages.length = 0;
     await vscode.commands.executeCommand("mnemoverse.copyMcpConfig");
     const copied = vscode.__state.messages[0].message;
+    expect(JSON.parse(vscode.__state.clipboard)).toEqual({ mcpServers: { mnemoverse: { serverUrl: HOSTED } } });
     expect(copied).toContain("~/.gemini/config/mcp_config.json");
     expect(copied).toContain("click Refresh in Antigravity's MCP server list");
     expect(copied).not.toContain("signs you in to the hosted server through the browser");
-    expect(copied).toContain("doesn't accept Antigravity's sign-in yet");
+    expect(copied).not.toContain("doesn't accept");
+    expect(copied).toContain("should open the browser");
   });
 
   it("Kiro with Mnemoverse already in ~/.kiro/settings/mcp.json: 'In your MCP config', no setup toast, never 'Connected'", async () => {
