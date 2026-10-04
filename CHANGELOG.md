@@ -11,6 +11,16 @@ and versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 - README: a "From the author" section replaces "Feedback": why the extension
   exists, and the same rating, star and issue links.
 
+### Fixed
+
+- **Devin Desktop: Copy MCP Config now gives the entry Devin reads.** Since
+  version 3.9.19 Devin Desktop's only agent is Devin Local, which reads
+  `~/.config/devin/mcp_config.json` and expects `url` for a remote server
+  (Devin CLI MCP configuration, read 2026-10-04). The command named the old
+  Windsurf file first and wrote Windsurf's `serverUrl`. It now names the Devin
+  file and writes `url`. An entry already in the Windsurf file still counts as
+  set up, because Devin imports that file by default.
+
 ## [0.3.0] — 2026-09-23
 
 Support for the editors that install the extension from Open VSX, not only

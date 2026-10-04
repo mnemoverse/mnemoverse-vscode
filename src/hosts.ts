@@ -247,15 +247,17 @@ const MCP_CONFIG_TARGETS: Readonly<Partial<Record<HostId, McpConfigTarget>>> = {
     homePaths: [".codeium/windsurf/mcp_config.json"],
     signIn: "unverified",
   },
-  // Devin Desktop (ex-Windsurf) is mid-migration: the FAQ still names the
-  // Windsurf file, while Devin Local reads the Devin CLI config. Both paths are
-  // shown and checked; the `serverUrl` field follows Windsurf and is NOT
-  // verified for the Devin CLI file.
+  // Devin Desktop (ex-Windsurf). Since v3.9.19 (2026-09-08) its only agent is
+  // Devin Local, which reads the Devin CLI config: docs.devin.ai/cli/extensibility/
+  // mcp/configuration documents ~/.config/devin/mcp_config.json and `url` for a
+  // remote server (read 2026-10-04). An entry left in the Windsurf file still
+  // loads, because Devin imports it by default, so both paths are checked for
+  // an existing entry. Sign-in from Devin Local is not verified.
   devin: {
-    file: "~/.codeium/windsurf/mcp_config.json (or ~/.config/devin/mcp_config.json for Devin Local)",
+    file: "~/.config/devin/mcp_config.json (Windows: %APPDATA%\\devin\\mcp_config.json)",
     rootKey: "mcpServers",
-    urlField: "serverUrl",
-    homePaths: [".codeium/windsurf/mcp_config.json", ".config/devin/mcp_config.json"],
+    urlField: "url",
+    homePaths: [".config/devin/mcp_config.json", ".codeium/windsurf/mcp_config.json"],
     signIn: "unverified",
   },
   // antigravity.google/docs/mcp: global file ~/.gemini/config/mcp_config.json,

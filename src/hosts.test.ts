@@ -91,12 +91,21 @@ describe("buildMcpConfigSnippet — per host", () => {
     expect(mcpConfigTargetFor("kiro").file).toBe("~/.kiro/settings/mcp.json");
   });
 
-  it("Windsurf, Devin and Antigravity: mcpServers + serverUrl", () => {
-    for (const host of ["windsurf", "devin", "antigravity"] as const) {
+  it("Windsurf and Antigravity: mcpServers + serverUrl", () => {
+    for (const host of ["windsurf", "antigravity"] as const) {
       expect(parse(buildMcpConfigSnippet(host))).toEqual({ mcpServers: { mnemoverse: { serverUrl: HOSTED_MCP_URL } } });
     }
     expect(mcpConfigTargetFor("windsurf").file).toContain("~/.codeium/windsurf/mcp_config.json");
     expect(mcpConfigTargetFor("antigravity").file).toContain("mcp_config.json");
+  });
+
+  it("Devin Desktop: the Devin CLI file, mcpServers + url, both files checked", () => {
+    expect(parse(buildMcpConfigSnippet("devin"))).toEqual({ mcpServers: { mnemoverse: { url: HOSTED_MCP_URL } } });
+    expect(mcpConfigTargetFor("devin").file).toContain("~/.config/devin/mcp_config.json");
+    expect(mcpConfigTargetFor("devin").homePaths).toEqual([
+      ".config/devin/mcp_config.json",
+      ".codeium/windsurf/mcp_config.json",
+    ]);
   });
 
   it("Trae: mcpServers + url (unverified default)", () => {
