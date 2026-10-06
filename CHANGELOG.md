@@ -6,6 +6,10 @@ and versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.3.1] — 2026-10-06
+
 ### Changed
 
 - README: a "From the author" section replaces "Feedback": why the extension
