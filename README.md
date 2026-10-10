@@ -133,7 +133,7 @@ With `mnemoverse.connection` set to `hosted`, the provider returns an HTTP serve
 - With the hosted connection, and in Cursor, the extension doesn't need or send a key: the editor holds the OAuth sign-in. A key stored earlier (for the local connection, or by version 0.2 in Cursor) stays in the keychain until you run **Sign Out** or **Clear API Key**; on the hosted connection the status bar menu offers **Remove stored key**.
 - The extension only reads MCP config files: Cursor's `mcp.json` files (to avoid adding Mnemoverse twice) and the Kiro, Windsurf and Antigravity config (to see whether you already added it). It counts only an entry for `https://mcp.mnemoverse.com` or the `@mnemoverse/mcp-memory-server` package run through npx (or pnpm, yarn, bun), and it skips files that are large, not regular files, or, inside a workspace, symlinks. It never writes any MCP config file itself: **Add to Cursor** hands the entry to Cursor's own install, which you confirm in Cursor, and the connection commands change only the `mnemoverse.connection` setting.
 - The extension contains zero telemetry of its own.
-- Memory content is sent to `core.mnemoverse.com` over HTTPS. The [Mnemoverse privacy policy](https://mnemoverse.com/privacy) says what is stored and for how long.
+- Memory content is sent to `core.mnemoverse.com` over HTTPS. The [Mnemoverse privacy policy](https://mnemoverse.com/docs/legal/privacy-policy) says what is stored and for how long.
 - Capabilities declared in `package.json`: `untrustedWorkspaces: false` (the local connection spawns `npx`, which runs third-party code), `virtualWorkspaces: false` (the extension needs a local extension host).
 
 ### Security disclosures
