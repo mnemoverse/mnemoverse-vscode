@@ -23,13 +23,13 @@ export const WALKTHROUGH_ID = "Mnemoverse.mnemoverse-vscode#mnemoverse.getStarte
  * take back a made-up preference (the earlier example, "I prefer Railway for
  * deployments", would have steered every later deploy question). So the
  * test fact is the setup itself: the editor and today's date (local calendar
- * day, YYYY-MM-DD, from rating-core). An agent without memory cannot guess the
- * answer to the follow-up, so a correct answer really shows recall.
+ * day, YYYY-MM-DD, from rating-core). The follow-up explicitly asks for
+ * memory_read; its actual tool result, not an answer alone, verifies recall.
  */
 export function tryItPrompt(app: string, now = Date.now()): string {
-  return `Remember that I set up Mnemoverse memory in ${app} on ${localDay(now)}.`;
+  return `Call memory_write to save this fact: I set up Mnemoverse memory in ${app} on ${localDay(now)}.`;
 }
-export const TRY_IT_FOLLOW_UP = "When and where did I set up Mnemoverse memory?";
+export const TRY_IT_FOLLOW_UP = "Call memory_read: when and where did I set up Mnemoverse memory?";
 
 interface MenuItem extends vscode.QuickPickItem {
   run?: () => Thenable<unknown>;
@@ -157,7 +157,7 @@ export async function tryIt(): Promise<void> {
     }
   }
   const choice = await vscode.window.showInformationMessage(
-    `Open the agent chat in ${app} and send: "${prompt}" Then start a new chat and ask "${TRY_IT_FOLLOW_UP}" If the agent answers with that date and ${app}, memory is working.`,
+    `In ${app}, first ask the agent to call memory_stats and check for a successful response. To test saving, send: "${prompt}" Check that memory_write confirms storage. Then start a new chat and ask "${TRY_IT_FOLLOW_UP}" Verify that memory_read returns the saved date and editor; an answer alone is not proof.`,
     "Copy prompt",
   );
   if (choice === "Copy prompt") {

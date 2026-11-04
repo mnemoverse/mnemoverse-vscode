@@ -779,7 +779,7 @@ describe("walkthrough and try-it", () => {
     await vscode.commands.executeCommand("mnemoverse.tryIt");
     // A TRUE fact (it goes into permanent, shared memory): the editor and today's date.
     expect(chat).toHaveBeenCalledWith({
-      query: expect.stringMatching(/^Remember that I set up Mnemoverse memory in Visual Studio Code on \d{4}-\d{2}-\d{2}\.$/),
+      query: expect.stringMatching(/^Call memory_write to save this fact: I set up Mnemoverse memory in Visual Studio Code on \d{4}-\d{2}-\d{2}\.$/),
       isPartialQuery: true,
       mode: "agent",
     });
@@ -793,9 +793,9 @@ describe("walkthrough and try-it", () => {
     await ext.activate(vscode.__makeContext() as never);
     await flush();
     await vscode.commands.executeCommand("mnemoverse.tryIt");
-    expect(vscode.__state.clipboard).toMatch(/^Remember that I set up Mnemoverse memory in Cursor on \d{4}-\d{2}-\d{2}\.$/);
+    expect(vscode.__state.clipboard).toMatch(/^Call memory_write to save this fact: I set up Mnemoverse memory in Cursor on \d{4}-\d{2}-\d{2}\.$/);
     const steps = vscode.__state.messages.find((m) => m.items.includes("Copy prompt"));
-    expect(steps?.message).toContain("When and where did I set up Mnemoverse memory?");
+    expect(steps?.message).toContain("Call memory_read: when and where did I set up Mnemoverse memory?");
   });
 });
 

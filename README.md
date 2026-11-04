@@ -42,15 +42,19 @@ These editors don't let extensions add MCP servers yet. Run **Mnemoverse: Copy M
 
 ## Try it
 
-In agent chat, tell the agent something true with today's date (**Mnemoverse: Try It in Chat** fills it in):
+First ask the agent to call `memory_stats` and inspect the actual result. A successful response confirms access; the extension's status or visible tool names alone do not.
 
-> Remember that I set up Mnemoverse memory in VS Code on 2026-09-23.
+Then tell the agent something true with your editor's name and today's date (**Mnemoverse: Try It in Chat** fills those details in). For example, if you are setting it up in VS Code today:
+
+> Remember that I set up Mnemoverse memory in VS Code today. Use today's date and call memory_write to save it.
+
+Check the `memory_write` result before treating the fact as saved. `NOT STORED` or `stored: false` means no new memory was saved; keep the returned reason and do not assume it was a duplicate or retry blindly.
 
 Open a **new chat** and ask:
 
-> When and where did I set up Mnemoverse memory?
+> Call memory_read: when and where did I set up Mnemoverse memory?
 
-If the agent answers with that date and editor, memory is connected. The memory stays across sessions, across machines on the same account, and in every other Mnemoverse-connected tool.
+Verify that the `memory_read` result contains the date and editor you saved, in the same domain if you chose one. An answer without the tool result does not prove persistence. If writing succeeded but reading it back did not, report verification as incomplete. Other tools connected to the same Mnemoverse account can read the same memories.
 
 ## Where it works
 
@@ -61,7 +65,7 @@ What the extension can do depends on the editor it is installed in:
 | **VS Code 1.102+**, Insiders | Registers Mnemoverse as an MCP server through VS Code's MCP API. The agent in chat (Agent mode) gets the memory tools. |
 | **VSCodium, Positron, Eclipse Theia** | The same, through the same API. The tools appear only where the editor's agent uses MCP servers from extensions (for example VSCodium with a separately installed agent, or Positron with Copilot tools). Browser Sign In is not yet accepted from Positron, Theia, VSCodium Insiders or other forks the console doesn't know; there the extension offers **Set API Key** with a key from the [console](https://console.mnemoverse.com) instead. |
 | **Cursor** | In editor windows, adds Mnemoverse's hosted server as `extension-mnemoverse`. Cursor's Agents Window runs no extensions, so the extension offers **Add to Cursor (all windows)**: Cursor's own install puts `mnemoverse` in your Cursor MCP settings, and the extension then removes its in-window copy so tools aren't listed twice. You sign in from **Cursor Settings → Tools & MCPs** (click Connect); Cursor runs the sign-in and holds it. If your `~/.cursor/mcp.json` or the project's `.cursor/mcp.json` already has Mnemoverse, the extension adds nothing. |
-| **Kiro, Windsurf / Devin Desktop, Trae, Antigravity** | These editors don't let extensions add MCP servers yet. The extension says so and offers **Copy MCP config**: a snippet for the hosted server, with the name of the config file to paste it into. It doesn't write any config file. It reads the file (Kiro, Windsurf / Devin Desktop, Antigravity) to notice when Mnemoverse is already there. **Antigravity:** Mnemoverse doesn't accept Antigravity's sign-in yet, so memory can't be connected there for now; the [setup guide](https://mnemoverse.com/docs/api/editors) has the current status. |
+| **Kiro, Windsurf / Devin Desktop, Trae, Antigravity** | The guidance menu offers **Copy MCP config** in Kiro, Windsurf / Devin Desktop, and Trae: a snippet for the hosted server, with the name of the config file to paste it into. In Antigravity, the guidance menu offers only **Open setup guide**. It doesn't write any config file. It reads the file (Kiro, Windsurf / Devin Desktop, Antigravity) to notice when Mnemoverse is already there. Follow the [host setup guide](https://mnemoverse.com/docs/api/editors) for current connection routes and sign-in limitations, including Antigravity. A copied or detected config does not verify successful authentication or memory calls. |
 
 The status bar item (**Mnemoverse**) shows what happened in your editor: **Connected** (local server, signed in), **Sign in**, **Node.js needed**, **Added to _editor_** (hosted connection: the editor runs its own sign-in), **Added to this window** (a Cursor editor window; run **Add to Cursor** for the Agents Window), **In your MCP config** (you added Mnemoverse to the editor's config yourself), or **Set up needed**. **Mnemoverse: Show Log** has the details.
 
@@ -87,7 +91,7 @@ The extension connects the editor you install it in. Other tools connect to the 
 | **Windsurf** | [Windsurf guide](https://mnemoverse.com/docs/api/windsurf) |
 | **Claude Code** | [`claude mcp add` one-liner](https://mnemoverse.com/docs/api/claude) |
 | **Claude Desktop / claude.ai** | [Remote connector or config file](https://mnemoverse.com/docs/api/claude-apps) |
-| **ChatGPT** | [OAuth connector (developer mode), or a Custom GPT with GPT Actions and an API key](https://mnemoverse.com/docs/api/chatgpt) |
+| **ChatGPT** | [Install the published Mnemoverse Memory plugin](https://chatgpt.com/plugins/plugin_asdk_app_6ada598cec7c81918b22105edfafcb33), then browser sign-in and [connection verification](https://mnemoverse.com/docs/api/chatgpt). [Custom MCP](https://mnemoverse.com/docs/api/chatgpt-custom-mcp) and [GPT Actions](https://mnemoverse.com/docs/api/chatgpt-actions) remain separate advanced alternatives. |
 | **Any HTTP client** | [REST API](https://mnemoverse.com/docs/api/reference) |
 
 ## Commands
