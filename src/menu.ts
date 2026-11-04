@@ -157,7 +157,7 @@ export async function tryIt(): Promise<void> {
     }
   }
   const choice = await vscode.window.showInformationMessage(
-    `Open the agent chat in ${app} and send: "${prompt}" Then start a new chat and ask "${TRY_IT_FOLLOW_UP}" If the agent answers with that date and ${app}, memory is working.`,
+    `In ${app}, first ask the agent to call memory_stats and check for a successful response. To test saving, send: "${prompt}" Check that memory_write confirms storage. Then start a new chat and ask "${TRY_IT_FOLLOW_UP}" Verify that memory_read returns the saved date and editor; an answer alone is not proof.`,
     "Copy prompt",
   );
   if (choice === "Copy prompt") {
