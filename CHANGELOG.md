@@ -8,6 +8,25 @@ and versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 _Nothing yet._
 
+## [0.3.2] — 2026-11-05
+
+### Changed
+
+- Lead ChatGPT setup with the published Mnemoverse Memory plugin. Keep custom
+  MCP and GPT Actions as alternative routes, with host-specific setup guidance.
+- Make the Try It prompt and walkthrough request `memory_write` and
+  `memory_read` explicitly, and confirm saved or retrieved memory from the tool
+  result. Setup-only checks use `memory_stats` without saving synthetic data.
+- Clarify that Antigravity uses the setup guide, and link directly to the
+  documentation's privacy policy.
+
+### Fixed
+
+- Ignore Cursor settings lookups that finish after adoption polling expires,
+  is stopped, or is replaced. A late lookup no longer withdraws the extension's
+  registration or stops a newer poll. Window-focus rechecks still pick up an
+  entry added after the polling timeout.
+
 ## [0.3.1] — 2026-10-06
 
 ### Changed
