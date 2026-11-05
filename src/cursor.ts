@@ -82,6 +82,7 @@ export const ADOPT_POLL_LIMIT_MS = 3 * 60_000;
 /** Whether this activation registered "extension-mnemoverse" (so it can be withdrawn). */
 let registeredByUs = false;
 let pollTimer: ReturnType<typeof setInterval> | undefined;
+let pollGeneration = 0;
 
 /**
  * Commands that open Cursor's MCP settings, tried in order. Both exist in Cursor
@@ -199,6 +200,8 @@ async function adoptUserEntry(found: FoundEntry): Promise<void> {
 }
 
 function stopPolling(): void {
+  // Invalidate a read already in flight, not only future interval ticks.
+  pollGeneration++;
   if (pollTimer !== undefined) {
     clearInterval(pollTimer);
     pollTimer = undefined;
@@ -210,11 +213,15 @@ function stopPolling(): void {
  * it was found. Never throws (findExistingCursorEntry reads defensively).
  */
 export async function recheckCursorSettings(): Promise<boolean> {
+  return recheckCursorSettingsIf(() => true);
+}
+
+async function recheckCursorSettingsIf(canAdopt: () => boolean): Promise<boolean> {
   if (getConfiguredEntry()) {
     return true;
   }
   const found = await findExistingCursorEntry();
-  if (!found) {
+  if (!found || !canAdopt()) {
     return false;
   }
   stopPolling();
@@ -245,6 +252,7 @@ export async function addToCursorSettings(): Promise<void> {
   log.info("Cursor: opened the MCP install deeplink; waiting for the entry in ~/.cursor/mcp.json");
   stopPolling();
   const started = Date.now();
+  const generation = pollGeneration;
   let inFlight = false; // a slow read must not overlap the next tick and adopt twice
   pollTimer = setInterval(() => {
     // The time limit is checked first and synchronously: a read still in
@@ -257,7 +265,9 @@ export async function addToCursorSettings(): Promise<void> {
     if (inFlight) return;
     inFlight = true;
     void (async () => {
-      if (await recheckCursorSettings()) {
+      if (await recheckCursorSettingsIf(
+        () => generation === pollGeneration && Date.now() - started <= ADOPT_POLL_LIMIT_MS,
+      )) {
         const entry = getConfiguredEntry();
         void vscode.window.showInformationMessage(
           `Mnemoverse is now in your Cursor MCP settings${entry ? ` as "${entry.server}"` : ""}, for every window including the Agents Window. Sign in there: click Connect next to it in Cursor Settings → Tools & MCPs.`,

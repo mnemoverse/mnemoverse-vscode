@@ -642,6 +642,63 @@ describe("Add to Cursor (the Agents Window runs no extensions)", () => {
     }
   });
 
+  it.each(["times out", "passes its deadline", "is disposed", "is replaced"] as const)(
+    "ignores a settings lookup that finishes after polling %s",
+    async (stopped) => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+      try {
+        const { vscode, ext } = await load();
+        const cursor = await import("../src/cursor");
+        const configFiles = await import("../src/config-files");
+        const unregister = vi.fn();
+        vscode.__setHost({ appName: "Cursor", uriScheme: "cursor", lm: "stub", cursor: cursorApi(vi.fn(), unregister) });
+        const ctx = vscode.__makeContext();
+        await ext.activate(ctx as never);
+        await vscode.commands.executeCommand("mnemoverse.addToCursor");
+
+        let completeLookup!: (found: import("../src/config-files").FoundEntry) => void;
+        const lookup = vi.spyOn(configFiles, "findMnemoverseEntry").mockImplementationOnce(
+          () => new Promise((resolve) => { completeLookup = resolve; }),
+        );
+        await vi.advanceTimersByTimeAsync(cursor.ADOPT_POLL_MS);
+        expect(lookup).toHaveBeenCalledTimes(1);
+        if (stopped === "times out") {
+          await vi.advanceTimersByTimeAsync(cursor.ADOPT_POLL_LIMIT_MS);
+          expect(vscode.__state.logLines.some((l) => l.includes("stopped waiting"))).toBe(true);
+        } else if (stopped === "passes its deadline") {
+          // The read can finish after the deadline but before the next timer tick.
+          vi.setSystemTime(Date.now() + cursor.ADOPT_POLL_LIMIT_MS);
+        } else if (stopped === "is disposed") {
+          cursor.cursorPollingDisposable.dispose();
+        } else {
+          await vscode.commands.executeCommand("mnemoverse.addToCursor");
+        }
+
+        completeLookup({ file: path.join(home, ".cursor", "mcp.json"), server: "mnemoverse" });
+        await flush();
+        expect(unregister).not.toHaveBeenCalled();
+        expect(String(vscode.__state.statusItems[0].tooltip)).toContain("Added to this window");
+        expect(vscode.__state.messages.some((m) => m.message.includes("now in your Cursor MCP settings"))).toBe(false);
+
+        if (stopped !== "is disposed") {
+          writeCursorSettingsEntry();
+          if (stopped === "is replaced") {
+            // The old read must not cancel the new poll.
+            await vi.advanceTimersByTimeAsync(cursor.ADOPT_POLL_MS);
+          } else {
+            // An explicit focus recheck still works after polling expired.
+            vscode.__fireWindowState(true);
+          }
+          await waitFor(() => unregister.mock.calls.length > 0);
+          expect(unregister).toHaveBeenCalledExactlyOnceWith("mnemoverse");
+        }
+        for (const disposable of ctx.subscriptions) disposable.dispose();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it("when the settings already have Mnemoverse, says so instead of opening the deeplink", async () => {
     writeCursorSettingsEntry();
     const { vscode, ext } = await load();
