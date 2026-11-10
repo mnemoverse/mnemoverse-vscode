@@ -58,7 +58,7 @@ Ratings change how memories rank in later searches, for this user in every conne
 
 ## 4. Shared rooms
 
-A room is a separate memory pool shared with other people and agents (Beta). A plain `memory_read` covers only the user's own memories, **not** rooms.
+A room is a separate memory pool shared with other people and agents. A plain `memory_read` covers only the user's own memories, **not** rooms.
 
 - `memory_list_rooms` lists the rooms and their addresses (`xroom:room_…`).
 - To read or write a room, pass its address as `domain` to `memory_read` or `memory_write`.

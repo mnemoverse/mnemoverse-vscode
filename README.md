@@ -12,7 +12,7 @@
 
 - **Memory that carries over.** The agent saves preferences, decisions and lessons with `memory_write` and finds them again with `memory_read` in any later chat: across sessions, branches and projects.
 - **It learns from outcomes.** When the agent rates a recalled memory as helpful or harmful with `memory_feedback`, that rating changes how the memory ranks the next time.
-- **Shared rooms (Beta).** Share a memory pool with other agents and people, and read what they wrote.
+- **Shared rooms.** Share a memory pool with other agents and people, and read what they wrote.
 - **One memory across your tools.** The same Mnemoverse account works in Claude, ChatGPT and other MCP clients. Each tool connects in its own way (see [Other clients](#other-clients)).
 
 No `.vscode/mcp.json` to edit and no JSON to commit: the extension registers the memory server with the editor itself.
@@ -78,7 +78,7 @@ The status bar item (**Mnemoverse**) shows what happened in your editor: **Conne
 
 ## Tools the agent gets
 
-The local connection runs [`@mnemoverse/mcp-memory-server`](https://github.com/mnemoverse/mcp-memory-server) with `npx`; the hosted connection and Cursor use `https://mcp.mnemoverse.com/mcp`. Both give the agent the same memory tools: storing and searching memories, a newest-first listing, usefulness feedback that changes ranking, stats, shared rooms (Beta) and a Vault alias listing (values are never returned). This README does not copy the list, so it cannot fall behind a release: the tools the hosted server serves right now, with descriptions and schemas, are at [its server card](https://mcp.mnemoverse.com/.well-known/mcp/server-card.json), and the [server README](https://github.com/mnemoverse/mcp-memory-server#tools) has the full reference for the local package. Deleting memories is an administrative REST operation, not a tool; see the [privacy and deletion policy](https://github.com/mnemoverse/mcp-memory-server#privacy-policy).
+The local connection runs [`@mnemoverse/mcp-memory-server`](https://github.com/mnemoverse/mcp-memory-server) with `npx`; the hosted connection and Cursor use `https://mcp.mnemoverse.com/mcp`. Both give the agent the same memory tools: storing and searching memories, a newest-first listing, usefulness feedback that changes ranking, stats, shared rooms and a Vault alias listing (values are never returned). This README does not copy the list, so it cannot fall behind a release: the tools the hosted server serves right now, with descriptions and schemas, are at [its server card](https://mcp.mnemoverse.com/.well-known/mcp/server-card.json), and the [server README](https://github.com/mnemoverse/mcp-memory-server#tools) has the full reference for the local package. Deleting memories is an administrative REST operation, not a tool; see the [privacy and deletion policy](https://github.com/mnemoverse/mcp-memory-server#privacy-policy).
 
 ## Other clients
 
