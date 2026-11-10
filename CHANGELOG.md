@@ -6,7 +6,9 @@ and versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- Shared rooms are no longer labelled beta (owner decision of 2026-11-10): the README, the walkthrough step, the bundled skill and the walkthrough description in `package.json`. Text only.
 
 ## [0.3.2] — 2026-11-05
 

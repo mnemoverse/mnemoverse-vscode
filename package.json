@@ -271,7 +271,7 @@
           {
             "id": "shareRoom",
             "title": "Share memory through a room",
-            "description": "A room is a memory pool you share with other people and agents (Beta). Ask the agent to create one and invite a teammate.\n[Read the docs](https://mnemoverse.com/docs)",
+            "description": "A room is a memory pool you share with other people and agents. Ask the agent to create one and invite a teammate.\n[Read the docs](https://mnemoverse.com/docs)",
             "media": {
               "markdown": "media/walkthrough/share-room.md"
             },

@@ -1,6 +1,6 @@
 # Share memory through a room
 
-A **room** is a separate memory pool that several people and agents can read and write (Beta).
+A **room** is a separate memory pool that several people and agents can read and write.
 
 - Ask the agent to **create a room** for a project (`memory_create_room`).
 - Ask it to **invite** a teammate (`memory_invite_to_room`). They join with the invite code (`memory_join_room`).
